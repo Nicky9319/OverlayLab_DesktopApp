@@ -1,58 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
-import { getAllLeads, updateLeadStatus as apiUpdateLeadStatus, updateLeadNotes as apiUpdateLeadNotes, deleteLead as apiDeleteLead, moveLeadToBucket as apiMoveLeadToBucket, getAllBuckets } from '../../../services/leadflowService';
+import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
+import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
+import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 
 const Leads = () => {
-  const [leads, setLeads] = useState([]);
-  const [buckets, setBuckets] = useState([]);
-  const [selectedBucketId, setSelectedBucketId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [bucketsLoading, setBucketsLoading] = useState(true);
+  const dispatch = useDispatch();
+  
+  // Get data from Redux state
+  const { leads, loading, selectedBucketId } = useSelector((state) => state.leads);
+  const { buckets, loading: bucketsLoading } = useSelector((state) => state.buckets);
 
-  // Fetch leads from API
-  const fetchLeads = async (bucketId = null) => {
-    try {
-      setLoading(true);
-      const leadsData = await getAllLeads(bucketId);
-      setLeads(leadsData);
-    } catch (error) {
-      console.error('Error fetching leads:', error);
-      setLeads([]);
-    } finally {
-      setLoading(false);
-    }
+  // Filter leads by selected bucket (if a bucket is selected)
+  const filteredLeads = selectedBucketId 
+    ? leads.filter(lead => lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId)
+    : leads;
+
+  // Fetch buckets and leads on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      // Fetch buckets first
+      const bucketsResult = await dispatch(fetchBuckets());
+      
+      // Get buckets from the result or from Redux state
+      let bucketsData = [];
+      if (fetchBuckets.fulfilled.match(bucketsResult)) {
+        bucketsData = bucketsResult.payload;
+      } else {
+        // Fallback: get from current state
+        bucketsData = buckets;
+      }
+      
+      // Set first bucket as default if available
+      if (bucketsData.length > 0) {
+        const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
+        dispatch(setSelectedBucketId(firstBucketId));
+        await dispatch(fetchLeads(firstBucketId));
+      } else {
+        // If no buckets, load all leads
+        await dispatch(fetchLeads(null));
+      }
+    };
+
+    loadData();
+  }, [dispatch]); // Only run on mount
+
+  // Handle bucket selection
+  const handleBucketChange = (bucketId) => {
+    dispatch(setSelectedBucketId(bucketId));
+    dispatch(fetchLeads(bucketId || null));
   };
 
-  // Fetch buckets from API
-  const fetchBuckets = async () => {
-    try {
-      setBucketsLoading(true);
-      const bucketsData = await getAllBuckets();
-      setBuckets(bucketsData);
-    } catch (error) {
-      console.error('Error fetching buckets:', error);
-      setBuckets([]);
-    } finally {
-      setBucketsLoading(false);
-    }
+  // Handle refetch all leads
+  const handleRefetchLeads = () => {
+    dispatch(fetchLeads(selectedBucketId));
   };
 
   // Function to update lead notes
-  const updateLeadNotes = async (leadId, newNotes) => {
+  const handleUpdateLeadNotes = async (leadId, newNotes) => {
     try {
-      const response = await apiUpdateLeadNotes(leadId, newNotes);
-      if (response.status_code === 200) {
-        // Update local state on successful API call
-        setLeads(prevLeads => 
-          prevLeads.map(lead => 
-            lead.leadId === leadId 
-              ? { ...lead, notes: newNotes }
-              : lead
-          )
-        );
+      const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
+      if (updateLeadNotes.fulfilled.match(result)) {
         console.log('Notes updated successfully for lead:', leadId);
       } else {
-        console.error('Failed to update notes:', response.content);
+        console.error('Failed to update notes:', result.error);
       }
     } catch (error) {
       console.error('Error updating lead notes:', error);
@@ -60,21 +72,13 @@ const Leads = () => {
   };
 
   // Function to update lead status
-  const updateLeadStatus = async (leadId, newStatus) => {
+  const handleUpdateLeadStatus = async (leadId, newStatus) => {
     try {
-      const response = await apiUpdateLeadStatus(leadId, newStatus);
-      if (response.status_code === 200) {
-        // Update local state on successful API call
-        setLeads(prevLeads => 
-          prevLeads.map(lead => 
-            lead.leadId === leadId 
-              ? { ...lead, status: newStatus }
-              : lead
-          )
-        );
+      const result = await dispatch(updateLeadStatus({ leadId, status: newStatus }));
+      if (updateLeadStatus.fulfilled.match(result)) {
         console.log('Status updated successfully for lead:', leadId);
       } else {
-        console.error('Failed to update status:', response.content);
+        console.error('Failed to update status:', result.error);
       }
     } catch (error) {
       console.error('Error updating lead status:', error);
@@ -82,17 +86,13 @@ const Leads = () => {
   };
 
   // Function to delete lead
-  const deleteLead = async (leadId) => {
+  const handleDeleteLead = async (leadId) => {
     try {
-      const response = await apiDeleteLead(leadId, selectedBucketId);
-      if (response.status_code === 200) {
-        // Remove lead from local state on successful API call
-        setLeads(prevLeads => 
-          prevLeads.filter(lead => lead.leadId !== leadId)
-        );
+      const result = await dispatch(removeLead({ leadId, bucketId: selectedBucketId }));
+      if (removeLead.fulfilled.match(result)) {
         console.log('Lead deleted successfully:', leadId);
       } else {
-        console.error('Failed to delete lead:', response.content);
+        console.error('Failed to delete lead:', result.error);
       }
     } catch (error) {
       console.error('Error deleting lead:', error);
@@ -100,67 +100,26 @@ const Leads = () => {
   };
 
   // Function to move lead to different bucket
-  const moveLeadToBucket = async (leadId, targetBucketId, sourceBucketId) => {
+  const handleMoveLeadToBucket = async (leadId, targetBucketId, sourceBucketId) => {
     try {
       console.log('Moving lead:', { leadId, targetBucketId, sourceBucketId });
-      const response = await apiMoveLeadToBucket(leadId, targetBucketId, sourceBucketId);
+      const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
       
-      if (response.status_code === 200) {
-        // Remove lead from current bucket's leads list
-        setLeads(prevLeads => 
-          prevLeads.filter(lead => lead.leadId !== leadId)
-        );
-        
-        // If we're currently viewing the source bucket, the lead should disappear
-        // If we're viewing the target bucket, we should refresh to show the moved lead
+      if (moveLeadToBucket.fulfilled.match(result)) {
+        // If we're currently viewing the target bucket, refresh to show the moved lead
         if (selectedBucketId === targetBucketId) {
-          // Refresh leads to show the moved lead in the target bucket
-          await fetchLeads(targetBucketId);
+          await dispatch(fetchLeads(targetBucketId));
         }
-        
         console.log('Lead moved successfully to bucket:', targetBucketId);
       } else {
-        console.error('Failed to move lead:', response.content);
-        throw new Error(response.content?.detail || 'Failed to move lead');
+        console.error('Failed to move lead:', result.error);
+        throw new Error(result.error || 'Failed to move lead');
       }
     } catch (error) {
       console.error('Error moving lead:', error);
       throw error; // Re-throw to let the BucketSelector handle the error
     }
   };
-
-  // Handle bucket selection
-  const handleBucketChange = (bucketId) => {
-    setSelectedBucketId(bucketId);
-    fetchLeads(bucketId);
-  };
-
-  // Handle refetch all leads
-  const handleRefetchLeads = () => {
-    fetchLeads(selectedBucketId);
-  };
-
-  // Fetch buckets and leads on component mount
-  useEffect(() => {
-    const loadData = async () => {
-      // Fetch buckets first
-      const bucketsData = await getAllBuckets();
-      setBuckets(bucketsData);
-      setBucketsLoading(false);
-      
-      // Set first bucket as default if available
-      if (bucketsData.length > 0) {
-        const firstBucketId = bucketsData[0].id;
-        setSelectedBucketId(firstBucketId);
-        await fetchLeads(firstBucketId);
-      } else {
-        // If no buckets, load all leads
-        await fetchLeads();
-      }
-    };
-
-    loadData();
-  }, []);
 
 
   if (loading || bucketsLoading) {
@@ -196,12 +155,13 @@ const Leads = () => {
               <select
                 id="bucket-select"
                 value={selectedBucketId || ''}
-                onChange={(e) => handleBucketChange(e.target.value)}
+                onChange={(e) => handleBucketChange(e.target.value || null)}
                 className="px-3 py-2 bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
               >
+                <option value="">All Leads</option>
                 {buckets.map((bucket) => (
-                  <option key={bucket.id} value={bucket.id}>
-                    {bucket.name}
+                  <option key={bucket.bucketId || bucket.id} value={bucket.bucketId || bucket.id}>
+                    {bucket.bucketName || bucket.name}
                   </option>
                 ))}
               </select>
@@ -230,16 +190,16 @@ const Leads = () => {
           
           {/* Lead count display */}
           <div className="text-sm text-[#8E8E93] mb-4">
-            Showing {leads.length} leads from bucket: {buckets.find(b => b.id === selectedBucketId)?.name || 'Unknown'}
+            Showing {filteredLeads.length} leads {selectedBucketId ? `from bucket: ${buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
           </div>
         </div>
         
         <LeadsContainer 
-          leads={leads} 
-          updateLeadNotes={updateLeadNotes} 
-          updateLeadStatus={updateLeadStatus} 
-          deleteLead={deleteLead}
-          moveLeadToBucket={moveLeadToBucket}
+          leads={filteredLeads} 
+          updateLeadNotes={handleUpdateLeadNotes} 
+          updateLeadStatus={handleUpdateLeadStatus} 
+          deleteLead={handleDeleteLead}
+          moveLeadToBucket={handleMoveLeadToBucket}
           buckets={buckets}
           currentBucketId={selectedBucketId}
         />

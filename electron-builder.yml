@@ -1,5 +1,5 @@
-appId: com.leadflow.app
-productName: Leadflow
+appId: com.overlaylab.app
+productName: OverlayLab
 directories:
   buildResources: build
 files:
@@ -11,11 +11,11 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: leadflow
+  executableName: overlaylab
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: Leadflow
-  uninstallDisplayName: Leadflow
+  shortcutName: OverlayLab
+  uninstallDisplayName: OverlayLab
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist

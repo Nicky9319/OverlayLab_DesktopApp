@@ -1,6 +1,8 @@
 // LeadFlow Service - Unified API client for all LeadFlow API calls
-// Base URL using domain instead of hardcoded IP
-const BASE_URL = "https://leadflow.api.overlaylab.studio";
+// Base URL resolved from centralized API config
+import { LEADFLOW_API_URL } from '../config/api';
+
+const BASE_URL = LEADFLOW_API_URL;
 
 // Import renderer logger
 import { createLogger } from '../utils/rendererLogger';

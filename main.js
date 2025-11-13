@@ -139,7 +139,7 @@ class UndetectableWidgetWindow {
     if (isWindows) {
       // Windows-specific: Set as system window to avoid Alt+Tab
       this.window.setAppDetails({
-        appId: 'leadflow.widget.overlay',
+        appId: 'overlaylab.widget.overlay',
         appIconPath: '',
         appIconIndex: 0,
         relaunchCommand: '',
@@ -1488,7 +1488,7 @@ function createTray() {
   // Create tray menu
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show LeadFlow',
+      label: 'Show OverlayLab',
       click: () => {
         if (mainWindow) {
           mainWindow.show();
@@ -1497,7 +1497,7 @@ function createTray() {
       }
     },
     {
-      label: 'Hide LeadFlow',
+      label: 'Hide OverlayLab',
       click: () => {
         if (mainWindow) {
           mainWindow.hide();
@@ -1560,7 +1560,7 @@ function createTray() {
   ]);
   
   // Set tray tooltip
-  tray.setToolTip('LeadFlow Desktop App');
+  tray.setToolTip('OverlayLab Desktop App');
   
   // Set tray menu
   tray.setContextMenu(contextMenu);

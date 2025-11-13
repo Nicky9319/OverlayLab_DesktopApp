@@ -3,8 +3,9 @@ import { useSelector, useDispatch } from 'react-redux';
 import HoverComponent from '../common/components/HoverComponent';
 import { themeColors } from '../common/utils/colors';
 import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
+import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
+import { createLead } from '../../../store/thunks/leadsThunks';
 import { setBuckets } from '../../store/slices/bucketsSlice';
-import { getAllBuckets, addLead } from '../../../services/leadflowService';
 
 const ActionBar = () => {
   const dispatch = useDispatch();
@@ -185,44 +186,29 @@ const ActionBar = () => {
       
       console.log('📤 Calling addLead API...');
       
-      // Call the addLead function from leadflowService
-      const result = await addLead(imageFile, bucketId);
+      // Call the createLead thunk which handles API call and Redux update
+      const result = await dispatch(createLead({ imageFile, bucketId }));
       
       console.log('📥 AddLead API Response received:');
-      console.log('- Status Code:', result.status_code);
-      console.log('- Content Type:', typeof result.content);
       console.log('- Full Response:', result);
-      console.log('- Response Content:', JSON.stringify(result.content, null, 2));
       
-      // Check for success status codes (200, 201, 202)
-      if (result.status_code >= 200 && result.status_code < 300) {
+      // Check if thunk was fulfilled
+      if (createLead.fulfilled.match(result)) {
         console.log('🎉 Lead processing initiated successfully!');
-        console.log('✅ Response Details:', result.content);
+        console.log('✅ Response Details:', result.payload);
         
-        // You can dispatch an action here to update the UI or show a success message
-        // dispatch(addLeadToStore(result.content));
-        
-        const successMessage = result.content?.message || result.content?.detail || 'Lead created successfully!';
+        const successMessage = result.payload?.message || result.payload?.detail || 'Lead created successfully!';
         console.log('📢 Success message:', successMessage);
         
-        // Handle different success scenarios with visual feedback
-        if (result.status_code === 202) {
-          console.log('🔄 Lead is being processed in the background');
-          // Show processing animation on floating widget
-          showLeadProcessingFeedback('processing', result.content);
-        } else {
-          console.log('✅ Lead created immediately');
-          // Show success animation on floating widget
-          showLeadProcessingFeedback('success', result.content);
-        }
+        // Show success animation on floating widget
+        showLeadProcessingFeedback('success', result.payload);
       } else {
-        console.error('❌ Failed to create lead - Status:', result.status_code);
-        console.error('❌ Error details:', result.content);
+        console.error('❌ Failed to create lead:', result.error);
         
-        const errorMessage = result.content?.detail || result.content?.message || `API returned status ${result.status_code}`;
+        const errorMessage = result.error || 'Failed to create lead';
         console.log('📢 Error message:', errorMessage);
         // Show error animation on floating widget
-        showLeadProcessingFeedback('error', result.content);
+        showLeadProcessingFeedback('error', { message: errorMessage });
       }
       
     } catch (error) {
@@ -447,11 +433,10 @@ const ActionBar = () => {
       if (!availableBuckets || availableBuckets.length === 0) {
         console.log('ActionBar: Buckets not loaded, attempting to fetch fresh buckets');
         try {
-          const freshBuckets = await getAllBuckets();
-          console.log('ActionBar: Fresh buckets fetched:', freshBuckets);
-          if (freshBuckets && freshBuckets.length > 0) {
-            dispatch(setBuckets(freshBuckets));
-            availableBuckets = freshBuckets;
+          const bucketsResult = await dispatch(fetchBuckets());
+          if (fetchBuckets.fulfilled.match(bucketsResult)) {
+            console.log('ActionBar: Fresh buckets fetched:', bucketsResult.payload);
+            availableBuckets = bucketsResult.payload;
           }
         } catch (error) {
           console.error('ActionBar: Failed to fetch fresh buckets:', error);
@@ -536,9 +521,10 @@ const ActionBar = () => {
   useEffect(() => {
     const loadBuckets = async () => {
       try {
-        const fetchedBuckets = await getAllBuckets();
-        console.log('ActionBar loaded buckets:', fetchedBuckets);
-        dispatch(setBuckets(fetchedBuckets));
+        const result = await dispatch(fetchBuckets());
+        if (fetchBuckets.fulfilled.match(result)) {
+          console.log('ActionBar loaded buckets:', result.payload);
+        }
       } catch (error) {
         console.error('Error loading buckets in ActionBar:', error);
       }
