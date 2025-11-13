@@ -5,10 +5,10 @@ import { ENV } from './envConfig';
 // Map of service URLs per environment
 const SERVICE_URLS = {
   development: {
-    LEADFLOW_SERVICE_URL: 'https://leadflow.api.overlaylab.studio',
+    LEADFLOW_SERVICE_URL: 'http://127.0.0.1:80',
   },
   production: {
-    LEADFLOW_SERVICE_URL: 'https://leadflow.api.overlaylab.studio',
+    LEADFLOW_SERVICE_URL: 'http://leadflow.api.overlaylab.studio',
   }
 };
 
