@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import BucketCard from './components/BucketCard';
 import AddBucketModal from './components/AddBucketModal';
 import { setBuckets, setLoading, setError, updateBucket, addBucket, deleteBucket } from '../../../store/slices/bucketsSlice';
-import { getAllBuckets, addNewBucket, updateBucketName, deleteBucket as deleteBucketService } from '../../../services/bucketsServices';
+import { getAllBuckets, addNewBucket, updateBucketName, deleteBucket as deleteBucketService } from '../../../services/leadflowService';
 
 const Buckets = () => {
     const dispatch = useDispatch();

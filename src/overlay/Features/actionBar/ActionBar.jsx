@@ -4,8 +4,7 @@ import HoverComponent from '../common/components/HoverComponent';
 import { themeColors } from '../common/utils/colors';
 import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { setBuckets } from '../../store/slices/bucketsSlice';
-import { getAllBuckets } from '../../../services/bucketsServices';
-import { addLead } from '../../../services/leadsService';
+import { getAllBuckets, addLead } from '../../../services/leadflowService';
 
 const ActionBar = () => {
   const dispatch = useDispatch();
@@ -186,7 +185,7 @@ const ActionBar = () => {
       
       console.log('📤 Calling addLead API...');
       
-      // Call the addLead function from leadsService
+      // Call the addLead function from leadflowService
       const result = await addLead(imageFile, bucketId);
       
       console.log('📥 AddLead API Response received:');

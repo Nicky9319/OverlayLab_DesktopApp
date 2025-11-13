@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import LeadsContainer from './components/LeadsContainer';
-import { getAllLeads, updateLeadStatus as apiUpdateLeadStatus, updateLeadNotes as apiUpdateLeadNotes, deleteLead as apiDeleteLead, moveLeadToBucket as apiMoveLeadToBucket } from '../../../services/leadsService';
-import { getAllBuckets } from '../../../services/bucketsServices';
+import { getAllLeads, updateLeadStatus as apiUpdateLeadStatus, updateLeadNotes as apiUpdateLeadNotes, deleteLead as apiDeleteLead, moveLeadToBucket as apiMoveLeadToBucket, getAllBuckets } from '../../../services/leadflowService';
 
 const Leads = () => {
   const [leads, setLeads] = useState([]);
