@@ -48,6 +48,11 @@ if (process.contextIsolated) {
       getScreenshotProcessStatus: () => ipcRenderer.invoke('get-screenshot-process-status'),
       // Open external URLs
       openExternal: (url) => ipcRenderer.invoke('open-external', url),
+      
+      // Redux IPC Sync APIs
+      broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
+      onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
+      removeReduxBroadcastListener: () => ipcRenderer.removeAllListeners('redux-action-broadcast'),
     });
 
     contextBridge.exposeInMainWorld('widgetAPI', {
@@ -150,5 +155,10 @@ else{
     validateAndCaptureScreenshot: () => ipcRenderer.invoke('validate-and-capture-screenshot'),
     proceedWithScreenshot: (source) => ipcRenderer.invoke('proceed-with-screenshot', source),
     getScreenshotProcessStatus: () => ipcRenderer.invoke('get-screenshot-process-status'),
+    
+    // Redux IPC Sync APIs
+    broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
+    onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
+    removeReduxBroadcastListener: () => ipcRenderer.removeAllListeners('redux-action-broadcast'),
   }
 }

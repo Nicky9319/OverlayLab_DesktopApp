@@ -1,8 +1,12 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 /**
- * Buckets Redux Slice
+ * Buckets Redux Slice with IPC Broadcast Support
  * Based on MongoDB schema: { bucketId: string, bucketName: string }
+ * 
+ * Each reducer supports a 'broadcast' parameter:
+ * - broadcast=true: Send to main process for broadcasting (don't update local state)
+ * - broadcast=false: Update local state (received from broadcast)
  */
 const bucketsSlice = createSlice({
   name: 'buckets',
@@ -14,73 +18,129 @@ const bucketsSlice = createSlice({
   },
   reducers: {
     // Set all buckets (used after fetching from API)
-    setBuckets: (state, action) => {
-      state.buckets = action.payload;
-      state.loading = false;
-      state.error = null;
-      state.lastFetched = Date.now();
-    },
-    // Set loading state
-    setLoading: (state, action) => {
-      state.loading = action.payload;
-      if (action.payload) {
-        state.error = null; // Clear error when starting to load
-      }
-    },
-    // Set error state
-    setError: (state, action) => {
-      state.error = action.payload;
-      state.loading = false;
-    },
-    // Update bucket name (supports both id/bucketId and name/bucketName)
-    updateBucket: (state, action) => {
-      const { id, bucketId, name, bucketName } = action.payload;
-      const targetId = id || bucketId;
-      const newName = name || bucketName;
-      
-      if (!targetId || !newName) return;
-      
-      const bucket = state.buckets.find(b => 
-        b.bucketId === targetId || b.id === targetId
-      );
-      if (bucket) {
-        bucket.bucketName = newName;
-        // Also update 'name' if it exists for backward compatibility
-        if (bucket.name !== undefined) {
-          bucket.name = newName;
+    setBuckets: {
+      reducer: (state, action) => {
+        // Only update state if not broadcasting
+        if (!action.payload.broadcast) {
+          state.buckets = action.payload.data;
+          state.loading = false;
+          state.error = null;
+          state.lastFetched = Date.now();
         }
-      }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
     },
+    
+    // Set loading state
+    setLoading: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          state.loading = action.payload.data;
+          if (action.payload.data) {
+            state.error = null; // Clear error when starting to load
+          }
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
+    },
+    
+    // Set error state
+    setError: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          state.error = action.payload.data;
+          state.loading = false;
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
+    },
+    
+    // Update bucket name (supports both id/bucketId and name/bucketName)
+    updateBucket: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          const { id, bucketId, name, bucketName } = action.payload.data;
+          const targetId = id || bucketId;
+          const newName = name || bucketName;
+          
+          if (!targetId || !newName) return;
+          
+          const bucket = state.buckets.find(b => 
+            b.bucketId === targetId || b.id === targetId
+          );
+          if (bucket) {
+            bucket.bucketName = newName;
+            // Also update 'name' if it exists for backward compatibility
+            if (bucket.name !== undefined) {
+              bucket.name = newName;
+            }
+          }
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
+    },
+    
     // Add a new bucket
-    addBucket: (state, action) => {
-      const bucket = action.payload;
-      // Normalize to ensure bucketId and bucketName exist
-      const normalizedBucket = {
-        bucketId: bucket.bucketId || bucket.id,
-        bucketName: bucket.bucketName || bucket.name,
-        ...bucket
-      };
-      // Check if bucket already exists
-      const exists = state.buckets.some(b => 
-        b.bucketId === normalizedBucket.bucketId || 
-        (b.id && b.id === normalizedBucket.bucketId)
-      );
-      if (!exists) {
-        state.buckets.push(normalizedBucket);
-      }
+    addBucket: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          const bucket = action.payload.data;
+          // Normalize to ensure bucketId and bucketName exist
+          const normalizedBucket = {
+            bucketId: bucket.bucketId || bucket.id,
+            bucketName: bucket.bucketName || bucket.name,
+            ...bucket
+          };
+          // Check if bucket already exists
+          const exists = state.buckets.some(b => 
+            b.bucketId === normalizedBucket.bucketId || 
+            (b.id && b.id === normalizedBucket.bucketId)
+          );
+          if (!exists) {
+            state.buckets.push(normalizedBucket);
+          }
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
     },
+    
     // Delete a bucket by ID
-    deleteBucket: (state, action) => {
-      const bucketId = action.payload;
-      state.buckets = state.buckets.filter(bucket => 
-        bucket.bucketId !== bucketId && bucket.id !== bucketId
-      );
+    deleteBucket: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          const bucketId = action.payload.data;
+          state.buckets = state.buckets.filter(bucket => 
+            bucket.bucketId !== bucketId && bucket.id !== bucketId
+          );
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
     },
+    
     // Clear all buckets
-    clearBuckets: (state) => {
-      state.buckets = [];
-      state.error = null;
-      state.lastFetched = null;
+    clearBuckets: {
+      reducer: (state, action) => {
+        if (!action.payload.broadcast) {
+          state.buckets = [];
+          state.error = null;
+          state.lastFetched = null;
+        }
+      },
+      prepare: (data = null, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
     },
   },
 });

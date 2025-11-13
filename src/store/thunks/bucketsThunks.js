@@ -26,7 +26,8 @@ export const fetchBuckets = createAsyncThunk(
         ...bucket // Preserve other fields
       }));
       
-      dispatch(setBuckets(normalizedBuckets));
+      // Broadcast to all windows (broadcast=true)
+      dispatch(setBuckets(normalizedBuckets, true));
       return normalizedBuckets;
     } catch (error) {
       const errorMessage = error.message || 'Failed to fetch buckets';
@@ -53,7 +54,8 @@ export const createBucket = createAsyncThunk(
           ...response.content
         };
         
-        dispatch(addBucketAction(normalizedBucket));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(addBucketAction(normalizedBucket, true));
         return normalizedBucket;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create bucket';
@@ -78,7 +80,8 @@ export const updateBucketName = createAsyncThunk(
       const response = await leadflowService.updateBucketName(bucketId, bucketName);
       
       if (response.status_code === 200) {
-        dispatch(updateBucketAction({ bucketId, bucketName }));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(updateBucketAction({ bucketId, bucketName }, true));
         return { bucketId, bucketName };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update bucket';
@@ -103,7 +106,9 @@ export const removeBucket = createAsyncThunk(
       const response = await leadflowService.deleteBucket(bucketId);
       
       if (response.status_code === 200) {
-        dispatch(deleteBucketAction(bucketId));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(deleteBucketAction(bucketId, true));
+        dispatch(removeLeadsByBucketId(bucketId, true));
         return bucketId;
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete bucket';

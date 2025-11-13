@@ -38,7 +38,8 @@ export const fetchLeads = createAsyncThunk(
         ...lead // Preserve other fields
       }));
       
-      dispatch(setLeads(normalizedLeads));
+      // Broadcast to all windows (broadcast=true)
+      dispatch(setLeads(normalizedLeads, true));
       return normalizedLeads;
     } catch (error) {
       const errorMessage = error.message || 'Failed to fetch leads';
@@ -72,7 +73,8 @@ export const createLead = createAsyncThunk(
           ...response.content
         };
         
-        dispatch(addLeadAction(normalizedLead));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(addLeadAction(normalizedLead, true));
         return normalizedLead;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create lead';
@@ -98,7 +100,8 @@ export const updateLeadStatus = createAsyncThunk(
       const response = await leadflowService.updateLeadStatus(leadId, status);
       
       if (response.status_code === 200) {
-        dispatch(updateLeadStatusAction({ leadId, status }));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadStatusAction({ leadId, status }, true));
         return { leadId, status };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update lead status';
@@ -124,7 +127,8 @@ export const updateLeadNotes = createAsyncThunk(
       const response = await leadflowService.updateLeadNotes(leadId, notes);
       
       if (response.status_code === 200) {
-        dispatch(updateLeadNotesAction({ leadId, notes }));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadNotesAction({ leadId, notes }, true));
         return { leadId, notes };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update lead notes';
@@ -150,7 +154,8 @@ export const removeLead = createAsyncThunk(
       const response = await leadflowService.deleteLead(leadId, bucketId);
       
       if (response.status_code === 200) {
-        dispatch(deleteLeadAction(leadId));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(deleteLeadAction(leadId, true));
         return leadId;
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete lead';
@@ -176,7 +181,8 @@ export const moveLeadToBucket = createAsyncThunk(
       const response = await leadflowService.moveLeadToBucket(leadId, targetBucketId, sourceBucketId);
       
       if (response.status_code === 200) {
-        dispatch(moveLeadToBucketAction({ leadId, newBucketId: targetBucketId }));
+        // Broadcast to all windows (broadcast=true)
+        dispatch(moveLeadToBucketAction({ leadId, targetBucketId }, true));
         return { leadId, targetBucketId };
       } else {
         const errorMessage = response.content?.detail || 'Failed to move lead';

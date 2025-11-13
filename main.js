@@ -30,6 +30,61 @@ import { execSync } from 'child_process';
 // Imports and modules END !!! ---------------------------------------------------------------------------------------------------
 
 
+// Redux IPC Broadcasting System !!! ---------------------------------------------------------------------------------------------------
+
+/**
+ * Handle Redux action broadcasting across all renderer processes
+ * This enables state synchronization between multiple windows
+ */
+ipcMain.handle('broadcast-redux-action', (event, actionData) => {
+  try {
+    logger.info('Broadcasting Redux action across all windows:', {
+      type: actionData.type,
+      timestamp: actionData.timestamp,
+      sourceWindow: actionData.sourceWindow,
+      hasPayload: !!actionData.payload
+    });
+
+    // Get all windows (main, widget, setup, etc.)
+    const allWindows = BrowserWindow.getAllWindows();
+    let broadcastCount = 0;
+
+    allWindows.forEach((window) => {
+      // Skip destroyed windows
+      if (window.isDestroyed()) {
+        return;
+      }
+
+      // Skip the sender window to avoid circular broadcasts
+      if (window.webContents === event.sender) {
+        return;
+      }
+
+      try {
+        // Send the action to this window
+        window.webContents.send('redux-action-broadcast', {
+          type: actionData.type,
+          payload: actionData.payload,
+          timestamp: actionData.timestamp,
+          sourceWindow: actionData.sourceWindow
+        });
+        broadcastCount++;
+      } catch (error) {
+        logger.error('Failed to broadcast to window:', error);
+      }
+    });
+
+    logger.info(`Redux action broadcasted to ${broadcastCount} windows`);
+    return { success: true, broadcastCount };
+  } catch (error) {
+    logger.error('Error in Redux action broadcasting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Redux IPC Broadcasting System END !!! ---------------------------------------------------------------------------------------------------
+
+
 
 
 // Variables and constants !!! ---------------------------------------------------------------------------------------------------
