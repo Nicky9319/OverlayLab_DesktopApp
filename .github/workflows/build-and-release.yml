@@ -230,6 +230,7 @@ jobs:
         run: npm ci
 
       - name: Update version in package.json
+        shell: bash
         run: |
           NEW_VERSION="${{ needs.version.outputs.version }}"
           CURRENT_VERSION=$(node -p "require('./package.json').version")
