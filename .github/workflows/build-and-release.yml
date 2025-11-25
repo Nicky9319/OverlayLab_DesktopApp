@@ -40,6 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -138,13 +139,13 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: npm run build:win
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Build macOS executable
         if: matrix.os == 'macos-latest'
         run: npm run build:mac
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -190,6 +191,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.version.outputs.tag }}
           name: Release ${{ needs.version.outputs.tag }}
           body: |
@@ -207,5 +209,4 @@ jobs:
             ./artifacts/macos/**/*
           draft: false
           prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
 
