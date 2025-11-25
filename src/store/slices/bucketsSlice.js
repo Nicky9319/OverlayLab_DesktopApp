@@ -20,13 +20,12 @@ const bucketsSlice = createSlice({
     // Set all buckets (used after fetching from API)
     setBuckets: {
       reducer: (state, action) => {
-        // Only update state if not broadcasting
-        if (!action.payload.broadcast) {
-          state.buckets = action.payload.data;
-          state.loading = false;
-          state.error = null;
-          state.lastFetched = Date.now();
-        }
+        // Always update local state (broadcast flag is only for middleware to decide whether to broadcast)
+        // Ensure we always set an array, even if data is undefined/null
+        state.buckets = Array.isArray(action.payload.data) ? action.payload.data : [];
+        state.loading = false;
+        state.error = null;
+        state.lastFetched = Date.now();
       },
       prepare: (data, broadcast = false) => ({
         payload: { data, broadcast }
@@ -36,11 +35,10 @@ const bucketsSlice = createSlice({
     // Set loading state
     setLoading: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          state.loading = action.payload.data;
-          if (action.payload.data) {
-            state.error = null; // Clear error when starting to load
-          }
+        // Always update local state (broadcast flag is only for middleware)
+        state.loading = action.payload.data;
+        if (action.payload.data) {
+          state.error = null; // Clear error when starting to load
         }
       },
       prepare: (data, broadcast = false) => ({
@@ -51,10 +49,9 @@ const bucketsSlice = createSlice({
     // Set error state
     setError: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          state.error = action.payload.data;
-          state.loading = false;
-        }
+        // Always update local state (broadcast flag is only for middleware)
+        state.error = action.payload.data;
+        state.loading = false;
       },
       prepare: (data, broadcast = false) => ({
         payload: { data, broadcast }
@@ -64,22 +61,26 @@ const bucketsSlice = createSlice({
     // Update bucket name (supports both id/bucketId and name/bucketName)
     updateBucket: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          const { id, bucketId, name, bucketName } = action.payload.data;
-          const targetId = id || bucketId;
-          const newName = name || bucketName;
-          
-          if (!targetId || !newName) return;
-          
-          const bucket = state.buckets.find(b => 
-            b.bucketId === targetId || b.id === targetId
-          );
-          if (bucket) {
-            bucket.bucketName = newName;
-            // Also update 'name' if it exists for backward compatibility
-            if (bucket.name !== undefined) {
-              bucket.name = newName;
-            }
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure buckets is always an array
+        if (!Array.isArray(state.buckets)) {
+          state.buckets = [];
+        }
+        
+        const { id, bucketId, name, bucketName } = action.payload.data;
+        const targetId = id || bucketId;
+        const newName = name || bucketName;
+        
+        if (!targetId || !newName) return;
+        
+        const bucket = state.buckets.find(b => 
+          b.bucketId === targetId || b.id === targetId
+        );
+        if (bucket) {
+          bucket.bucketName = newName;
+          // Also update 'name' if it exists for backward compatibility
+          if (bucket.name !== undefined) {
+            bucket.name = newName;
           }
         }
       },
@@ -91,22 +92,26 @@ const bucketsSlice = createSlice({
     // Add a new bucket
     addBucket: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          const bucket = action.payload.data;
-          // Normalize to ensure bucketId and bucketName exist
-          const normalizedBucket = {
-            bucketId: bucket.bucketId || bucket.id,
-            bucketName: bucket.bucketName || bucket.name,
-            ...bucket
-          };
-          // Check if bucket already exists
-          const exists = state.buckets.some(b => 
-            b.bucketId === normalizedBucket.bucketId || 
-            (b.id && b.id === normalizedBucket.bucketId)
-          );
-          if (!exists) {
-            state.buckets.push(normalizedBucket);
-          }
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure buckets is always an array
+        if (!Array.isArray(state.buckets)) {
+          state.buckets = [];
+        }
+        
+        const bucket = action.payload.data;
+        // Normalize to ensure bucketId and bucketName exist
+        const normalizedBucket = {
+          bucketId: bucket.bucketId || bucket.id,
+          bucketName: bucket.bucketName || bucket.name,
+          ...bucket
+        };
+        // Check if bucket already exists
+        const exists = state.buckets.some(b => 
+          b.bucketId === normalizedBucket.bucketId || 
+          (b.id && b.id === normalizedBucket.bucketId)
+        );
+        if (!exists) {
+          state.buckets.push(normalizedBucket);
         }
       },
       prepare: (data, broadcast = false) => ({
@@ -117,12 +122,17 @@ const bucketsSlice = createSlice({
     // Delete a bucket by ID
     deleteBucket: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          const bucketId = action.payload.data;
-          state.buckets = state.buckets.filter(bucket => 
-            bucket.bucketId !== bucketId && bucket.id !== bucketId
-          );
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure buckets is always an array
+        if (!Array.isArray(state.buckets)) {
+          state.buckets = [];
+          return;
         }
+        
+        const bucketId = action.payload.data;
+        state.buckets = state.buckets.filter(bucket => 
+          bucket.bucketId !== bucketId && bucket.id !== bucketId
+        );
       },
       prepare: (data, broadcast = false) => ({
         payload: { data, broadcast }
@@ -132,11 +142,10 @@ const bucketsSlice = createSlice({
     // Clear all buckets
     clearBuckets: {
       reducer: (state, action) => {
-        if (!action.payload.broadcast) {
-          state.buckets = [];
-          state.error = null;
-          state.lastFetched = null;
-        }
+        // Always update local state (broadcast flag is only for middleware)
+        state.buckets = [];
+        state.error = null;
+        state.lastFetched = null;
       },
       prepare: (data = null, broadcast = false) => ({
         payload: { data, broadcast }

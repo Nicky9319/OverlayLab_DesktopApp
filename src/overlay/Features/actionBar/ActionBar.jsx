@@ -5,7 +5,7 @@ import { themeColors } from '../common/utils/colors';
 import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { createLead } from '../../../store/thunks/leadsThunks';
-import { setBuckets } from '../../store/slices/bucketsSlice';
+import { setBuckets } from '../../../store/slices/bucketsSlice';
 
 const ActionBar = () => {
   const dispatch = useDispatch();
@@ -155,9 +155,29 @@ const ActionBar = () => {
   const addLeadFromScreenshot = async (imageDataUrl, bucketId, screenshotInfo) => {
     try {
       console.log('🔄 Converting image data to File object...');
+      console.log('📸 Image Data URL info:', {
+        hasData: !!imageDataUrl,
+        length: imageDataUrl?.length || 0,
+        startsWithData: imageDataUrl?.startsWith('data:') || false,
+        hasBase64: imageDataUrl?.includes('base64,') || false
+      });
+      
+      // Validate imageDataUrl
+      if (!imageDataUrl || !imageDataUrl.startsWith('data:image/')) {
+        console.error('❌ Invalid imageDataUrl format:', imageDataUrl?.substring(0, 50));
+        throw new Error('Invalid image data URL format');
+      }
       
       // Convert base64 data URL to Blob directly (avoid CSP issues with fetch on data URLs)
       const base64Data = imageDataUrl.split(',')[1]; // Remove data:image/png;base64, prefix
+      
+      if (!base64Data || base64Data.length === 0) {
+        console.error('❌ No base64 data found in imageDataUrl');
+        throw new Error('No base64 data found in image URL');
+      }
+      
+      console.log('📊 Base64 data length:', base64Data.length);
+      
       const binaryString = atob(base64Data); // Decode base64
       const bytes = new Uint8Array(binaryString.length);
       
@@ -168,6 +188,17 @@ const ActionBar = () => {
       
       // Create blob from byte array
       const blob = new Blob([bytes], { type: 'image/png' });
+      console.log('📦 Blob created:', {
+        size: blob.size,
+        sizeInKB: (blob.size / 1024).toFixed(2) + ' KB',
+        type: blob.type
+      });
+      
+      // Validate blob is not empty
+      if (blob.size === 0) {
+        console.error('❌ Blob is empty! Cannot send to server.');
+        throw new Error('Image blob is empty - cannot send to server');
+      }
       
       // Create a proper filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -184,7 +215,13 @@ const ActionBar = () => {
         bucketId: bucketId
       });
       
-      console.log('📤 Calling addLead API...');
+      // Final validation before sending
+      if (imageFile.size === 0) {
+        console.error('❌ Image file size is 0! Cannot send to server.');
+        throw new Error('Image file is empty - cannot send to server');
+      }
+      
+      console.log('📤 Calling addLead API with file size:', imageFile.size, 'bytes');
       
       // Call the createLead thunk which handles API call and Redux update
       const result = await dispatch(createLead({ imageFile, bucketId }));

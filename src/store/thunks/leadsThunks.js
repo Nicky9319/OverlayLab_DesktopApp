@@ -38,7 +38,7 @@ export const fetchLeads = createAsyncThunk(
         ...lead // Preserve other fields
       }));
       
-      // Broadcast to all windows (broadcast=true)
+      // Broadcast to all windows (broadcast=true) - this also updates local state now
       dispatch(setLeads(normalizedLeads, true));
       return normalizedLeads;
     } catch (error) {

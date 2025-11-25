@@ -19,6 +19,8 @@ const BROADCASTABLE_ACTIONS = [
   'buckets/updateBucket',
   'buckets/deleteBucket',
   'buckets/clearBuckets',
+  'buckets/setLoading',
+  'buckets/setError',
   'leads/setLeads',
   'leads/addLead',
   'leads/updateLeadStatus',
@@ -27,7 +29,10 @@ const BROADCASTABLE_ACTIONS = [
   'leads/deleteLead',
   'leads/moveLeadToBucket',
   'leads/clearLeads',
-  'leads/removeLeadsByBucketId'
+  'leads/removeLeadsByBucketId',
+  'leads/setLoading',
+  'leads/setError',
+  'leads/setSelectedBucketId'
 ];
 
 /**
@@ -56,8 +61,9 @@ const ipcSyncMiddleware = (store) => (next) => (action) => {
         logger.warn('electronAPI.broadcastReduxAction not available');
       }
 
-      // Don't update local state when broadcasting
-      return;
+      // Still update local state when broadcasting (the sender window needs the update too)
+      // The middleware will broadcast, but we also need to process the action locally
+      return next(action);
     }
 
     // Check if this is a received broadcast (broadcast=false)

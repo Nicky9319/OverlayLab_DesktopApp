@@ -4,7 +4,8 @@ import floatingWidgetSlice from './slices/floatingWidgetSlice'
 import uiVisibilityReducer from './slices/uiVisibilitySlice'
 import chatStateReducer from './slices/chatStateSlice'
 import webSocketReducer from './slices/websocketSlice'
-import bucketsReducer from './slices/bucketsSlice'
+// Use global slices for buckets and leads to ensure state synchronization across all windows
+import bucketsReducer from '../../store/slices/bucketsSlice'
 import leadsReducer from '../../store/slices/leadsSlice'
 import ipcSyncMiddleware from '../../store/middleware/ipcSyncMiddleware'
 

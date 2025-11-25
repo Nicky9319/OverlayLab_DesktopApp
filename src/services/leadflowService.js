@@ -60,7 +60,7 @@ const normalizeBuckets = (arr) => {
  */
 const getAllBuckets = async () => {
   logger.info('getAllBuckets called');
-  const resp = await request('/api/main-service/buckets/get-all-buckets', { method: 'GET' });
+  const resp = await request('/api/leadflow-service/buckets/get-all-buckets', { method: 'GET' });
 
   if (!resp || resp.status_code !== 200) {
     console.error('Failed to fetch buckets or non-200 response:', resp);
@@ -93,7 +93,7 @@ const addNewBucket = async (bucketName) => {
     return { status_code: 400, content: { detail: 'bucket_name is required' } };
   }
 
-  const resp = await request('/api/main-service/buckets/add-bucket', {
+  const resp = await request('/api/leadflow-service/buckets/add-bucket', {
     method: 'POST',
     body: JSON.stringify({ bucket_name: bucketName }),
   });
@@ -131,7 +131,7 @@ const updateBucketName = async (bucketId, bucketName) => {
     return { status_code: 400, content: { detail: 'bucket_id and bucket_name are required' } };
   }
 
-  const resp = await request('/api/main-service/buckets/update-bucket-name', {
+  const resp = await request('/api/leadflow-service/buckets/update-bucket-name', {
     method: 'PUT',
     body: JSON.stringify({ bucket_id: bucketId, bucket_name: bucketName }),
   });
@@ -153,7 +153,7 @@ const deleteBucket = async (bucketId) => {
   }
 
   // DELETE with query param as the backend expects params
-  const path = `/api/main-service/buckets/delete-bucket?bucket_id=${encodeURIComponent(bucketId)}`;
+  const path = `/api/leadflow-service/buckets/delete-bucket?bucket_id=${encodeURIComponent(bucketId)}`;
   const resp = await request(path, { method: 'DELETE' });
 
   logger.info('deleteBucket: Completed', { status: resp.status_code });
@@ -202,7 +202,7 @@ const getAllLeads = async (bucketId = null) => {
     params.append('bucket_id', bucketId);
   }
   
-  const path = `/api/main-service/leads/get-all-leads${params.toString() ? '?' + params.toString() : ''}`;
+  const path = `/api/leadflow-service/leads/get-all-leads${params.toString() ? '?' + params.toString() : ''}`;
   logger.debug('getAllLeads: Making request', { path });
   const resp = await request(path, { method: 'GET' });
 
@@ -264,9 +264,30 @@ const addLead = async (imageFile, bucketId = null) => {
   }
 
   try {
+    // Validate file before creating FormData
+    if (!imageFile || imageFile.size === 0) {
+      console.error('❌ leadflowService.addLead: Image file is empty or invalid', {
+        hasFile: !!imageFile,
+        fileSize: imageFile?.size || 0,
+        fileName: imageFile?.name || 'unknown'
+      });
+      logger.error('addLead: Image file is empty or invalid', {
+        hasFile: !!imageFile,
+        fileSize: imageFile?.size || 0
+      });
+      return { status_code: 400, content: { detail: 'Image file is empty or invalid' } };
+    }
+    
     // Create FormData for file upload
     const formData = new FormData();
     formData.append('file', imageFile);
+    
+    // Verify file was added to FormData
+    console.log('📋 FormData created with file:', {
+      fileName: imageFile.name,
+      fileSize: imageFile.size,
+      fileType: imageFile.type
+    });
     
     // Add bucket_id if provided
     if (bucketId) {
@@ -275,9 +296,15 @@ const addLead = async (imageFile, bucketId = null) => {
       logger.debug('addLead: Added bucket_id to FormData', { bucketId });
     }
 
-    const url = `${BASE_URL}/api/main-service/leads/add-lead`;
+    const url = `${BASE_URL}/api/leadflow-service/leads/add-lead`;
     console.log('📤 leadflowService.addLead: Making request to:', url);
-    logger.debug('addLead: Making POST request', { url });
+    console.log('📦 Request payload:', {
+      hasFormData: !!formData,
+      fileSize: imageFile.size,
+      fileName: imageFile.name,
+      bucketId: bucketId || 'none'
+    });
+    logger.debug('addLead: Making POST request', { url, fileSize: imageFile.size });
     
     const fetchOptions = {
       method: 'POST',
@@ -285,7 +312,7 @@ const addLead = async (imageFile, bucketId = null) => {
       // Don't set Content-Type header - let browser set it with boundary for FormData
     };
 
-    console.log('⏳ leadflowService.addLead: Sending request...');
+    console.log('⏳ leadflowService.addLead: Sending request with file size:', imageFile.size, 'bytes...');
     logger.debug('addLead: Sending request...');
     const resp = await fetch(url, fetchOptions);
     console.log('📥 leadflowService.addLead: Response received - Status:', resp.status, 'OK:', resp.ok);
@@ -331,7 +358,7 @@ const updateLeadStatus = async (leadId, status) => {
     return { status_code: 400, content: { detail: 'lead_id and status are required' } };
   }
 
-  const resp = await request('/api/main-service/leads/update-lead-status', {
+  const resp = await request('/api/leadflow-service/leads/update-lead-status', {
     method: 'PUT',
     body: JSON.stringify({ lead_id: leadId, status }),
   });
@@ -353,7 +380,7 @@ const updateLeadNotes = async (leadId, notes) => {
     return { status_code: 400, content: { detail: 'lead_id is required' } };
   }
 
-  const resp = await request('/api/main-service/leads/update-lead-notes', {
+  const resp = await request('/api/leadflow-service/leads/update-lead-notes', {
     method: 'PUT',
     body: JSON.stringify({ lead_id: leadId, notes: notes || '' }),
   });
@@ -394,7 +421,7 @@ const deleteLead = async (leadId, bucketId = null) => {
     console.log('📤 leadflowService.deleteLead: Making request with body:', body);
     logger.debug('deleteLead: Making DELETE request with body', body);
 
-    let resp = await request('/api/main-service/leads/delete-lead', {
+    let resp = await request('/api/leadflow-service/leads/delete-lead', {
       method: 'DELETE',
       body: JSON.stringify(body),
     });
@@ -413,7 +440,7 @@ const deleteLead = async (leadId, bucketId = null) => {
         params.append('bucket_id', bucketId);
       }
 
-      const path = `/api/main-service/leads/delete-lead?${params.toString()}`;
+      const path = `/api/leadflow-service/leads/delete-lead?${params.toString()}`;
       console.log('📤 leadflowService.deleteLead: Making request with query params to:', path);
       logger.debug('deleteLead: Making DELETE request with query params', { path });
       
@@ -461,7 +488,7 @@ const moveLeadToBucket = async (leadId, targetBucketId, sourceBucketId = null) =
     console.log('📤 leadflowService.moveLeadToBucket: Making request with body:', body);
     logger.debug('moveLeadToBucket: Making PUT request', body);
 
-    const resp = await request('/api/main-service/leads/change-lead-bucket', {
+    const resp = await request('/api/leadflow-service/leads/change-lead-bucket', {
       method: 'PUT',
       body: JSON.stringify(body),
     });

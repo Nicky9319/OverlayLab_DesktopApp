@@ -26,7 +26,7 @@ export const fetchBuckets = createAsyncThunk(
         ...bucket // Preserve other fields
       }));
       
-      // Broadcast to all windows (broadcast=true)
+      // Broadcast to all windows (broadcast=true) - this also updates local state now
       dispatch(setBuckets(normalizedBuckets, true));
       return normalizedBuckets;
     } catch (error) {
@@ -54,7 +54,7 @@ export const createBucket = createAsyncThunk(
           ...response.content
         };
         
-        // Broadcast to all windows (broadcast=true)
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
         dispatch(addBucketAction(normalizedBucket, true));
         return normalizedBucket;
       } else {
@@ -80,7 +80,7 @@ export const updateBucketName = createAsyncThunk(
       const response = await leadflowService.updateBucketName(bucketId, bucketName);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
         dispatch(updateBucketAction({ bucketId, bucketName }, true));
         return { bucketId, bucketName };
       } else {
@@ -106,7 +106,7 @@ export const removeBucket = createAsyncThunk(
       const response = await leadflowService.deleteBucket(bucketId);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
         dispatch(deleteBucketAction(bucketId, true));
         dispatch(removeLeadsByBucketId(bucketId, true));
         return bucketId;

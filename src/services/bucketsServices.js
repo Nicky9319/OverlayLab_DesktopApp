@@ -29,7 +29,7 @@ const request = async (path, options = {}) => {
 };
 
 const getAllBuckets = async () => {
-  const resp = await request('/api/main-service/buckets/get-all-buckets', { method: 'GET' });
+  const resp = await request('/api/leadflow-service/buckets/get-all-buckets', { method: 'GET' });
 
   if (!resp || resp.status_code !== 200) {
     console.error('Failed to fetch buckets or non-200 response:', resp);
@@ -68,7 +68,7 @@ const addNewBucket = async (bucketName) => {
     return { status_code: 400, content: { detail: 'bucket_name is required' } };
   }
 
-  const resp = await request('/api/main-service/buckets/add-bucket', {
+  const resp = await request('/api/leadflow-service/buckets/add-bucket', {
     method: 'POST',
     body: JSON.stringify({ bucket_name: bucketName }),
   });
@@ -97,7 +97,7 @@ const updateBucketName = async (bucketId, bucketName) => {
     return { status_code: 400, content: { detail: 'bucket_id and bucket_name are required' } };
   }
 
-  return await request('/api/main-service/buckets/update-bucket-name', {
+  return await request('/api/leadflow-service/buckets/update-bucket-name', {
     method: 'PUT',
     body: JSON.stringify({ bucket_id: bucketId, bucket_name: bucketName }),
   });
@@ -109,7 +109,7 @@ const deleteBucket = async (bucketId) => {
   }
 
   // DELETE with query param as the backend expects params
-  const path = `/api/main-service/buckets/delete-bucket?bucket_id=${encodeURIComponent(bucketId)}`;
+  const path = `/api/leadflow-service/buckets/delete-bucket?bucket_id=${encodeURIComponent(bucketId)}`;
   return await request(path, { method: 'DELETE' });
 };
 
