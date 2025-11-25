@@ -321,7 +321,7 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           tag_name: ${{ needs.version.outputs.tag }}
-          name: Release ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.version }}
           body: |
             ## Release ${{ needs.version.outputs.tag }}
             
