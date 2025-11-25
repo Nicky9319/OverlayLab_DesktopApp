@@ -35,6 +35,7 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:widget": "electron-vite dev --config electron.vite.config.mjs widget",
+    "dist": "electron-builder",
     "build": "electron-vite build",
     "build:check": "node scripts/check-env.js && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
