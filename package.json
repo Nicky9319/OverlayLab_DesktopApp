@@ -2,9 +2,33 @@
   "name": "overlaylab",
   "version": "1.0.0",
   "description": "Overlay Lab Desktop Application",
+  "productName": "OverlayLab",
   "main": "./out/main/main.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "overlaylab.studio",
+  "homepage": "https://overlaylab.studio",
+  "build": {
+    "copyright": "Copyright © 2025 Overlay Lab",
+    "files": [
+      "!node_modules/**/*",
+      "!dist/**/*",
+      "!build/**/*",
+      "!out/**/*",
+      "!public/**/*",
+      "!src/**/*",
+      "!test/**/*",
+      "!vite.config.mjs",
+      "!electron.vite.config.mjs"
+    ],
+    "win": {
+      "target": "appx"
+    },
+    "appx": {
+      "identityName": "<12345Publishername.AppName>",
+      "publisher": "<CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX>",
+      "publisherDisplayName": "<Publisher Name>",
+      "applicationId": "<Publishername.AppName>"
+    }
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
