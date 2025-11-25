@@ -55,5 +55,6 @@ removePackageScripts: true
 removePackageKeywords: true
 
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: Nicky9319
+  repo: OverlayLab_DesktopApp

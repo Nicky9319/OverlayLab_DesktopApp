@@ -49,6 +49,11 @@ if (process.contextIsolated) {
       // Open external URLs
       openExternal: (url) => ipcRenderer.invoke('open-external', url),
       
+      // Update API
+      downloadUpdate: () => ipcRenderer.invoke('update:download'),
+      restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+      getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+      
       // Redux IPC Sync APIs
       broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
       onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
@@ -84,6 +89,11 @@ if (process.contextIsolated) {
       validateAndCaptureScreenshot: () => ipcRenderer.invoke('validate-and-capture-screenshot'),
       proceedWithScreenshot: (source) => ipcRenderer.invoke('proceed-with-screenshot', source),
       getScreenshotProcessStatus: () => ipcRenderer.invoke('get-screenshot-process-status'),
+      
+      // Update API
+      downloadUpdate: () => ipcRenderer.invoke('update:download'),
+      restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+      getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
     });
 
   }
@@ -125,6 +135,11 @@ else{
 
     // Screenshot functionality
     captureAndSaveScreenshot: () => ipcRenderer.invoke('capture-and-save-screenshot'),
+    
+    // Update API
+    downloadUpdate: () => ipcRenderer.invoke('update:download'),
+    restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+    getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   }
   window.widgetAPI = {
     closeWidget: () => ipcRenderer.invoke('widget:close'),
@@ -155,6 +170,11 @@ else{
     validateAndCaptureScreenshot: () => ipcRenderer.invoke('validate-and-capture-screenshot'),
     proceedWithScreenshot: (source) => ipcRenderer.invoke('proceed-with-screenshot', source),
     getScreenshotProcessStatus: () => ipcRenderer.invoke('get-screenshot-process-status'),
+    
+    // Update API
+    downloadUpdate: () => ipcRenderer.invoke('update:download'),
+    restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+    getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
     
     // Redux IPC Sync APIs
     broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),

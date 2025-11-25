@@ -1,6 +1,6 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
@@ -96,10 +96,39 @@ let lastScreenshotTime = 0; // Cooldown tracking for global shortcut
 let lastValidationRequestTime = 0; // Cooldown tracking for screenshot validation requests
 let screenshotProcessActive = false; // Track if screenshot process is currently active
 
-// Configure auto-updater logging
-autoUpdater.logger = log;
+// Create a filtered logger that excludes blockmap errors with raw binary data
+const createFilteredLogger = () => {
+  const originalError = log.error;
+  const filteredLogger = {
+    ...log,
+    error: (...args) => {
+      // Convert all arguments to string to check for blockmap errors
+      const message = args.map(arg => {
+        if (arg instanceof Error) {
+          return arg.message + (arg.stack ? '\n' + arg.stack : '');
+        }
+        return String(arg);
+      }).join(' ');
+      
+      // Check if this is a blockmap error with raw binary data
+      // The indicator is "raw data:" followed by binary/unreadable content
+      if (message.includes('raw data:') || 
+          (message.includes('Cannot download differentially') && message.includes('blockmap')) ||
+          (message.includes('Cannot parse blockmap') && message.includes('incorrect header check'))) {
+        // Only log a simplified message without the raw binary data
+        originalError('[AutoUpdater] Cannot download differentially, fallback to full download: blockmap parsing error');
+        return; // Don't log the full error with binary data
+      }
+      // For all other errors, log normally
+      originalError(...args);
+    }
+  };
+  return filteredLogger;
+};
 
-autoUpdater.autoDownload = true;
+// Configure auto-updater logging and behavior with filtered logger
+autoUpdater.logger = createFilteredLogger();
+autoUpdater.autoDownload = false; // User must opt-in to download
 autoUpdater.autoInstallOnAppQuit = true;
 
 // Platform detection
@@ -1202,6 +1231,30 @@ ipcMain.handle('window:disableInteraction', () => {
   }
 });
 
+// Update download handler
+ipcMain.handle('update:download', async () => {
+  logger.info('[AutoUpdater] Download requested by user');
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    logger.error('[AutoUpdater] Error downloading update:', error);
+    return { success: false, error: error.message || String(error) };
+  }
+});
+
+// Update restart handler
+ipcMain.handle('update:restart', () => {
+  logger.info('[AutoUpdater] Restart requested by user');
+  app.isQuiting = true;
+  autoUpdater.quitAndInstall();
+});
+
+// Get app version handler
+ipcMain.handle('app:getVersion', () => {
+  return app.getVersion();
+});
+
 // WSL Setup APIs
 ipcMain.handle('installWSL', async () => {
   try {
@@ -1399,34 +1452,124 @@ ipcMain.handle('getWindowStatus', async () => {
 
 // Auto Update Section !!! -------------------------------------------------------------------------------------
 
+// Helper function to show native desktop notifications
+function showUpdateAvailableNotification(version) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: 'OverlayLab Update Available',
+      body: `Version ${version} is available. Click to download and install.`,
+      icon: icon,
+      urgency: 'normal'
+    });
+    
+    notification.on('click', () => {
+      // User can download via IPC handler
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    
+    notification.show();
+    logger.info('[AutoUpdater] Notification shown: Update available', { version });
+  }
+}
+
+function showUpdateDownloadedNotification(version) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: 'OverlayLab Update Ready',
+      body: `Update ${version} has been downloaded. The app needs to be restarted for the update to work. Click to restart now.`,
+      icon: icon,
+      urgency: 'normal'
+    });
+    
+    notification.on('click', () => {
+      // Restart the app
+      logger.info('[AutoUpdater] Restart requested from notification');
+      app.isQuiting = true;
+      autoUpdater.quitAndInstall();
+    });
+    
+    notification.show();
+    logger.info('[AutoUpdater] Notification shown: Update downloaded', { version });
+  }
+}
+
+function showUpdateErrorNotification(errorMessage) {
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: 'OverlayLab Update Error',
+      body: `Failed to check for updates: ${errorMessage}`,
+      icon: icon,
+      urgency: 'normal'
+    });
+    
+    notification.show();
+    logger.info('[AutoUpdater] Notification shown: Update error', { error: errorMessage });
+  }
+}
+
+// Helper function to send update events to renderer (for potential future use)
+function sendUpdateEvent(channel, data = {}) {
+  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send(channel, data);
+  }
+}
+
+// Auto-updater event handlers
 autoUpdater.on('checking-for-update', () => {
-  logger.info("Checking for Update");
+  logger.info('[AutoUpdater] Checking for update...');
+  sendUpdateEvent('update:checking');
 });
 
 autoUpdater.on('update-available', (info) => {
-  // autoUpdater.downloadUpdate();
-  logger.info('Update available', info);
+  logger.info('[AutoUpdater] Update available:', info.version);
+  logger.info('[AutoUpdater] Release notes:', info.releaseNotes);
+  sendUpdateEvent('update:available', {
+    version: info.version,
+    releaseNotes: info.releaseNotes
+  });
+  // Show native notification
+  showUpdateAvailableNotification(info.version);
 });
 
 autoUpdater.on('update-not-available', (info) => {
-  logger.info('Update not available', info);
+  logger.info('[AutoUpdater] Update not available. Current version is up to date.');
+  sendUpdateEvent('update:not-available', {
+    version: info?.version || app.getVersion()
+  });
 });
 
 autoUpdater.on('error', (err) => {
-  logger.error('Error in auto-updater', err);
+  logger.error('[AutoUpdater] Error:', err.message || err);
+  sendUpdateEvent('update:error', {
+    message: err.message || String(err)
+  });
+  // Show error notification
+  showUpdateErrorNotification(err.message || String(err));
 });
 
-autoUpdater.on('download-progress', (progressObj) => {
-  logger.info('Update download progress', {
-    bytesPerSecond: progressObj.bytesPerSecond,
-    percent: progressObj.percent,
-    transferred: progressObj.transferred,
-    total: progressObj.total
+autoUpdater.on('download-progress', (progress) => {
+  const logMessage = `[AutoUpdater] Download progress: ${progress.percent.toFixed(2)}% (${(progress.transferred / 1024 / 1024).toFixed(2)}MB / ${(progress.total / 1024 / 1024).toFixed(2)}MB) at ${(progress.bytesPerSecond / 1024 / 1024).toFixed(2)}MB/s`;
+  logger.info(logMessage);
+  sendUpdateEvent('update:progress', {
+    percent: progress.percent,
+    transferred: progress.transferred,
+    total: progress.total,
+    bytesPerSecond: progress.bytesPerSecond
   });
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-  logger.info('Update downloaded', info);
+  logger.info('[AutoUpdater] Update downloaded successfully:', info.version);
+  logger.info('[AutoUpdater] Update will be installed on next app restart.');
+  sendUpdateEvent('update:downloaded', {
+    version: info.version,
+    releaseNotes: info.releaseNotes
+  });
+  // Show native notification
+  showUpdateDownloadedNotification(info.version);
 });
 
 // Auto Updater Section END !!! ----------------------------------------------------------------------------------
@@ -2902,15 +3045,33 @@ app.whenReady().then(async () => {
   store = await loadStore();
   logger.info('Application store loaded');
 
-  // Auto Updater
-    // autoUpdater.setFeedURL({
-    //   provider: 'github',
-    //   owner: 'Nicky9319',
-    //   repo: 'UserApplication_UpdateRepo',
-    //   private: false,
-    // });  
+  // Configure auto-updater feed URL (GitHub releases)
+  // Configure and run auto-updater only in production (packaged app).
+  // Skip in development or when the app isn't packaged to avoid HTTP errors
+  // (e.g., no macOS release present) and unhandled promise rejections.
+  const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
+  if (!isDev && app.isPackaged) {
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'Nicky9319',
+      repo: 'OverlayLab_DesktopApp',
+      private: false,
+    });
 
-    // autoUpdater.checkForUpdates();
+    // Configure updater to handle blockmap issues gracefully
+    // The updater will automatically fall back to full downloads if blockmap parsing fails
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
+
+    // Check for updates on startup (await and catch to avoid unhandled rejections)
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (e) {
+      logger.warn('[AutoUpdater] Failed to check for updates:', e);
+    }
+  } else {
+    logger.info('[AutoUpdater] Skipping auto-updater in development/unpackaged mode');
+  }
   
 
   // Create main and widget windows directly
