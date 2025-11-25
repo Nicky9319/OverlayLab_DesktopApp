@@ -252,13 +252,31 @@ jobs:
 
       - name: Build macOS executable
         if: matrix.os == 'macos-latest'
-        run: npm run build:mac
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          # Set up environment variables conditionally
+          export GH_TOKEN="${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}"
+          
+          # Only set code signing variables if secrets exist and are not empty
+          if [ -n "${{ secrets.MAC_CERTIFICATE }}" ] && [ -n "${{ secrets.MAC_CERTIFICATE_PASSWORD }}" ]; then
+            echo "Code signing certificate found, preparing..."
+            echo "${{ secrets.MAC_CERTIFICATE }}" | base64 -d > certificate.p12
+            export CSC_LINK="$PWD/certificate.p12"
+            export CSC_KEY_PASSWORD="${{ secrets.MAC_CERTIFICATE_PASSWORD }}"
+            echo "Code signing enabled"
+          else
+            echo "No code signing certificate found, building without signing"
+            # Don't set CSC_LINK or CSC_KEY_PASSWORD - electron-builder will skip signing
+          fi
+          
+          # Set notarization variables if available
+          if [ -n "${{ secrets.APPLE_ID }}" ] && [ -n "${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" ]; then
+            export APPLE_ID="${{ secrets.APPLE_ID }}"
+            export APPLE_APP_SPECIFIC_PASSWORD="${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}"
+            echo "Notarization enabled"
+          fi
+          
+          # Run the build
+          npm run build:mac
 
       - name: Upload Windows artifacts
         if: matrix.os == 'windows-latest'
