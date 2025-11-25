@@ -174,14 +174,32 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}" || exit 0
-          git push origin prod
+          git push origin prod || exit 0
 
       - name: Create Git Tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
+          TAG_NAME="${{ steps.version.outputs.tag }}"
+          
+          # Fetch tags from remote to check if tag exists
+          git fetch --tags --quiet || true
+          
+          # Check if tag already exists locally
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists locally, skipping creation"
+          else
+            echo "Creating tag $TAG_NAME"
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME" || exit 0
+          fi
+          
+          # Check if tag exists on remote
+          if git ls-remote --tags origin "$TAG_NAME" | grep -q "refs/tags/$TAG_NAME"; then
+            echo "Tag $TAG_NAME already exists on remote, skipping push"
+          else
+            echo "Pushing tag $TAG_NAME to remote"
+            git push origin "$TAG_NAME" || exit 0
+          fi
 
   build:
     needs: [check, version]
