@@ -1,7 +1,14 @@
 appId: com.overlaylab.app
 productName: Overlay Lab
+
+protocols:
+  - name: overlaylab
+    schemes:
+      - overlaylab
+
 directories:
   buildResources: build
+
 icon: resources/icon.png
 files:
   - '!**/.vscode/*'
@@ -13,13 +20,14 @@ asarUnpack:
   - resources/**
 win:
   executableName: overlaylab
-  icon: resources/icon.ico
+  icon: resources/icon.png  # ✅ Changed from build/icon.ico to just icon.ico (relative to buildResources)
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: Overlay Lab
-  uninstallDisplayName: Overlay Lab
+  shortcutName: OverlayLabs
+  uninstallDisplayName: OverlayLabs
   createDesktopShortcut: always
 mac:
+  icon: resources/icon.png
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -29,7 +37,10 @@ mac:
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
+  background: resources/icon.png
+  icon: resources/icon.png
 linux:
+  icon: resources/icon.png
   target:
     - AppImage
     - snap
@@ -39,6 +50,10 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
+
+removePackageScripts: true
+removePackageKeywords: true
+
 publish:
   provider: generic
   url: https://example.com/auto-updates
