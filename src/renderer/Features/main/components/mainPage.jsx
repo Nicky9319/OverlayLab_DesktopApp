@@ -3,6 +3,7 @@ import LeftNavBar from '../../left-navbar/left-nav-bar';
 import Leads from '../../leads/leads';
 import Buckets from '../../buckets/buckets';
 import Taskbar from '../../taskbar/taskbar';
+import UpdateNotification from '../../update/UpdateNotification';
 
 const MainPage = () => {
     const [activeTab, setActiveTab] = useState('buckets');
@@ -33,6 +34,7 @@ const MainPage = () => {
                     {renderActiveComponent()}
                 </div>
             </div>
+            <UpdateNotification />
         </div>
     );
 };

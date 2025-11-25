@@ -1245,9 +1245,50 @@ ipcMain.handle('update:download', async () => {
 
 // Update restart handler
 ipcMain.handle('update:restart', () => {
-  logger.info('[AutoUpdater] Restart requested by user');
+  logger.info('[AutoUpdater] Restart requested by user - closing all windows');
+  
+  // Set quitting flag to allow windows to close
   app.isQuiting = true;
-  autoUpdater.quitAndInstall();
+  
+  // Close widget/overlay window first
+  if (widgetWindow) {
+    try {
+      if (!widgetWindow.isDestroyed()) {
+        logger.info('[AutoUpdater] Closing widget/overlay window');
+        widgetWindow.window.destroy(); // Use destroy for immediate cleanup
+      }
+      widgetWindow = null;
+    } catch (error) {
+      logger.error('[AutoUpdater] Error closing widget window:', error);
+    }
+  }
+  
+  // Close main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      logger.info('[AutoUpdater] Closing main window');
+      mainWindow.destroy(); // Use destroy for immediate cleanup
+    } catch (error) {
+      logger.error('[AutoUpdater] Error closing main window:', error);
+    }
+  }
+  
+  // Clean up tray if it exists
+  if (tray) {
+    try {
+      logger.info('[AutoUpdater] Destroying tray');
+      tray.destroy();
+      tray = null;
+    } catch (error) {
+      logger.error('[AutoUpdater] Error destroying tray:', error);
+    }
+  }
+  
+  // Small delay to ensure windows are fully closed before quitting
+  setTimeout(() => {
+    logger.info('[AutoUpdater] All windows closed, restarting for update');
+    autoUpdater.quitAndInstall();
+  }, 100);
 });
 
 // Get app version handler
@@ -1513,7 +1554,10 @@ function showUpdateErrorNotification(errorMessage) {
 // Helper function to send update events to renderer (for potential future use)
 function sendUpdateEvent(channel, data = {}) {
   if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    logger.info(`[AutoUpdater] Sending event to renderer: ${channel}`, data);
     mainWindow.webContents.send(channel, data);
+  } else {
+    logger.warn(`[AutoUpdater] Cannot send event ${channel} - mainWindow not ready`);
   }
 }
 
@@ -1542,12 +1586,21 @@ autoUpdater.on('update-not-available', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-  logger.error('[AutoUpdater] Error:', err.message || err);
+  const errorMessage = err.message || String(err);
+  const errorString = errorMessage.toString();
+  
+  // Ignore non-critical errors (dev-app-update.yml is optional and only needed for local dev/testing)
+  if (errorString.includes('dev-app-update.yml') && errorString.includes('ENOENT')) {
+    logger.warn('[AutoUpdater] Ignoring non-critical error (dev-app-update.yml not found - this is optional):', errorMessage);
+    return; // Don't show error notification for this non-critical issue
+  }
+  
+  logger.error('[AutoUpdater] Error:', errorMessage);
   sendUpdateEvent('update:error', {
-    message: err.message || String(err)
+    message: errorMessage
   });
-  // Show error notification
-  showUpdateErrorNotification(err.message || String(err));
+  // Show error notification only for critical errors
+  showUpdateErrorNotification(errorMessage);
 });
 
 autoUpdater.on('download-progress', (progress) => {
@@ -3045,12 +3098,16 @@ app.whenReady().then(async () => {
   store = await loadStore();
   logger.info('Application store loaded');
 
+  // Create main and widget windows directly (ensure windows exist before updater events)
+  logger.info('Creating initial main and widget windows');
+  createMainAndWidgetWindows();
+
   // Configure auto-updater feed URL (GitHub releases)
   // Configure and run auto-updater only in production (packaged app).
   // Skip in development or when the app isn't packaged to avoid HTTP errors
   // (e.g., no macOS release present) and unhandled promise rejections.
   const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
-  if (!isDev && app.isPackaged) {
+  if (!isDev || app.isPackaged) {
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'Nicky9319',
@@ -3063,20 +3120,13 @@ app.whenReady().then(async () => {
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
-    // Check for updates on startup (await and catch to avoid unhandled rejections)
-    try {
-      await autoUpdater.checkForUpdates();
-    } catch (e) {
+    // Check for updates on startup (don't block window creation)
+    autoUpdater.checkForUpdates().catch((e) => {
       logger.warn('[AutoUpdater] Failed to check for updates:', e);
-    }
+    });
   } else {
     logger.info('[AutoUpdater] Skipping auto-updater in development/unpackaged mode');
   }
-  
-
-  // Create main and widget windows directly
-  logger.info('Creating initial main and widget windows');
-  createMainAndWidgetWindows();
 
   // Register Protocol with the Windows
   // Note: Protocol handling will be set up after main window is created

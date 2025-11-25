@@ -1,0 +1,5 @@
+provider: github
+owner: Nicky9319
+repo: OverlayLab_DesktopApp
+updaterCacheDirName: overlaylab-updater
+

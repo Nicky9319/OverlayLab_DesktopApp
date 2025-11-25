@@ -50,9 +50,23 @@ if (process.contextIsolated) {
       openExternal: (url) => ipcRenderer.invoke('open-external', url),
       
       // Update API
+      onUpdateChecking: (callback) => ipcRenderer.on('update:checking', callback),
+      onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (event, data) => callback(data)),
+      onUpdateNotAvailable: (callback) => ipcRenderer.on('update:not-available', (event, data) => callback(data)),
+      onUpdateProgress: (callback) => ipcRenderer.on('update:progress', (event, data) => callback(data)),
+      onUpdateDownloaded: (callback) => ipcRenderer.on('update:downloaded', (event, data) => callback(data)),
+      onUpdateError: (callback) => ipcRenderer.on('update:error', (event, data) => callback(data)),
       downloadUpdate: () => ipcRenderer.invoke('update:download'),
       restartAndInstall: () => ipcRenderer.invoke('update:restart'),
       getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+      removeUpdateListeners: () => {
+        ipcRenderer.removeAllListeners('update:checking')
+        ipcRenderer.removeAllListeners('update:available')
+        ipcRenderer.removeAllListeners('update:not-available')
+        ipcRenderer.removeAllListeners('update:progress')
+        ipcRenderer.removeAllListeners('update:downloaded')
+        ipcRenderer.removeAllListeners('update:error')
+      },
       
       // Redux IPC Sync APIs
       broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
@@ -137,9 +151,23 @@ else{
     captureAndSaveScreenshot: () => ipcRenderer.invoke('capture-and-save-screenshot'),
     
     // Update API
+    onUpdateChecking: (callback) => ipcRenderer.on('update:checking', callback),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (event, data) => callback(data)),
+    onUpdateNotAvailable: (callback) => ipcRenderer.on('update:not-available', (event, data) => callback(data)),
+    onUpdateProgress: (callback) => ipcRenderer.on('update:progress', (event, data) => callback(data)),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update:downloaded', (event, data) => callback(data)),
+    onUpdateError: (callback) => ipcRenderer.on('update:error', (event, data) => callback(data)),
     downloadUpdate: () => ipcRenderer.invoke('update:download'),
     restartAndInstall: () => ipcRenderer.invoke('update:restart'),
     getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+    removeUpdateListeners: () => {
+      ipcRenderer.removeAllListeners('update:checking')
+      ipcRenderer.removeAllListeners('update:available')
+      ipcRenderer.removeAllListeners('update:not-available')
+      ipcRenderer.removeAllListeners('update:progress')
+      ipcRenderer.removeAllListeners('update:downloaded')
+      ipcRenderer.removeAllListeners('update:error')
+    },
   }
   window.widgetAPI = {
     closeWidget: () => ipcRenderer.invoke('widget:close'),
@@ -171,12 +199,26 @@ else{
     proceedWithScreenshot: (source) => ipcRenderer.invoke('proceed-with-screenshot', source),
     getScreenshotProcessStatus: () => ipcRenderer.invoke('get-screenshot-process-status'),
     
-    // Update API
-    downloadUpdate: () => ipcRenderer.invoke('update:download'),
-    restartAndInstall: () => ipcRenderer.invoke('update:restart'),
-    getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
-    
-    // Redux IPC Sync APIs
+      // Update API
+      onUpdateChecking: (callback) => ipcRenderer.on('update:checking', callback),
+      onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (event, data) => callback(data)),
+      onUpdateNotAvailable: (callback) => ipcRenderer.on('update:not-available', (event, data) => callback(data)),
+      onUpdateProgress: (callback) => ipcRenderer.on('update:progress', (event, data) => callback(data)),
+      onUpdateDownloaded: (callback) => ipcRenderer.on('update:downloaded', (event, data) => callback(data)),
+      onUpdateError: (callback) => ipcRenderer.on('update:error', (event, data) => callback(data)),
+      downloadUpdate: () => ipcRenderer.invoke('update:download'),
+      restartAndInstall: () => ipcRenderer.invoke('update:restart'),
+      getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+      removeUpdateListeners: () => {
+        ipcRenderer.removeAllListeners('update:checking')
+        ipcRenderer.removeAllListeners('update:available')
+        ipcRenderer.removeAllListeners('update:not-available')
+        ipcRenderer.removeAllListeners('update:progress')
+        ipcRenderer.removeAllListeners('update:downloaded')
+        ipcRenderer.removeAllListeners('update:error')
+      },
+      
+      // Redux IPC Sync APIs
     broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
     onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
     removeReduxBroadcastListener: () => ipcRenderer.removeAllListeners('redux-action-broadcast'),
