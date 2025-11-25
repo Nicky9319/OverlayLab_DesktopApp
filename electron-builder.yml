@@ -20,7 +20,7 @@ asarUnpack:
   - resources/**
 win:
   executableName: overlaylab
-  icon: resources/icon.png  # ✅ Changed from build/icon.ico to just icon.ico (relative to buildResources)
+  icon: resources/favicon.ico  # ✅ Changed from build/icon.ico to just icon.ico (relative to buildResources)
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: OverlayLabs
