@@ -2,7 +2,7 @@ appId: com.overlaylab.app
 productName: Overlay Lab
 directories:
   buildResources: build
-icon: resources/icon.ico
+icon: resources/icon.png
 files:
   - '!**/.vscode/*'
   - '!src/*'
