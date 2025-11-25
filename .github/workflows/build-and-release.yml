@@ -287,6 +287,7 @@ jobs:
           path: |
             dist/**/*.exe
             dist/**/*.zip
+            dist/**/latest.yml
           retention-days: 30
 
       - name: Upload macOS artifacts
@@ -297,6 +298,7 @@ jobs:
           path: |
             dist/**/*.dmg
             dist/**/*.zip
+            dist/**/latest-mac.yml
           retention-days: 30
 
   release:
