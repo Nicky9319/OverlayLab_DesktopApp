@@ -1538,8 +1538,36 @@ async function waitForDockerPing() {
 // Tray Functions Section !!! -------------------------------------------------------------------------------------
 
 function createTray() {
-  // Create tray icon
-  tray = new Tray(icon);
+  // Create tray icon with proper sizing for better clarity
+  // Use nativeImage to resize the icon appropriately for the system tray
+  const trayIcon = nativeImage.createFromPath(icon);
+  
+  // Resize icon to appropriate size for system tray
+  // Use larger sizes for better clarity, especially on high-DPI displays
+  let systemTraySize;
+  if (process.platform === 'darwin') {
+    // macOS uses 22px for standard displays, but supports @2x for retina
+    systemTraySize = 22;
+  } else if (process.platform === 'win32') {
+    // Windows works best with 16px or 32px, use 32px for better clarity
+    systemTraySize = 32;
+  } else {
+    // Linux typically uses 22px
+    systemTraySize = 22;
+  }
+  
+  // Resize the icon for better clarity in the tray
+  const resizedIcon = trayIcon.resize({ 
+    width: systemTraySize, 
+    height: systemTraySize
+  });
+  
+  // On macOS, you can use template images for better appearance
+  if (process.platform === 'darwin') {
+    resizedIcon.setTemplateImage(true);
+  }
+  
+  tray = new Tray(resizedIcon);
   
   // Create tray menu
   const contextMenu = Menu.buildFromTemplate([
@@ -1615,8 +1643,8 @@ function createTray() {
     }
   ]);
   
-  // Set tray tooltip
-  tray.setToolTip('OverlayLab Desktop App');
+  // Set tray tooltip to "OverlayLabs"
+  tray.setToolTip('OverlayLabs');
   
   // Set tray menu
   tray.setContextMenu(contextMenu);
