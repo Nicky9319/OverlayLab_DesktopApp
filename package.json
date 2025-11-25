@@ -9,24 +9,18 @@
   "build": {
     "copyright": "Copyright © 2025 Overlay Lab",
     "files": [
-      "!node_modules/**/*",
-      "!dist/**/*",
-      "!build/**/*",
-      "!out/**/*",
-      "!public/**/*",
-      "!src/**/*",
-      "!test/**/*",
-      "!vite.config.mjs",
-      "!electron.vite.config.mjs"
+      "out/**/*",
+      "node_modules/**/*",
+      "!test/**/*"
     ],
     "win": {
       "target": "appx"
     },
     "appx": {
-      "identityName": "<12345Publishername.AppName>",
-      "publisher": "<CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX>",
-      "publisherDisplayName": "<Publisher Name>",
-      "applicationId": "<Publishername.AppName>"
+      "identityName": "PaarthSaxena.OverlayLab",
+      "publisher": "CN=D8F1CB43-65C4-44A4-BB64-46A571AC9DFB",
+      "publisherDisplayName": "Paarth Saxena",
+      "applicationId": "PaarthSaxena.OverlayLab"
     }
   },
   "scripts": {
