@@ -1,7 +1,8 @@
 appId: com.overlaylab.app
-productName: OverlayLab
+productName: Overlay Lab
 directories:
   buildResources: build
+icon: resources/icon.ico
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -12,10 +13,11 @@ asarUnpack:
   - resources/**
 win:
   executableName: overlaylab
+  icon: resources/icon.ico
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: OverlayLab
-  uninstallDisplayName: OverlayLab
+  shortcutName: Overlay Lab
+  uninstallDisplayName: Overlay Lab
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist

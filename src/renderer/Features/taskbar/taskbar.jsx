@@ -157,7 +157,7 @@ const Taskbar = () => {
                     className="text-xs font-medium"
                     style={{ color: '#8E8E93' }}
                 >
-                    LeadFlow
+                    Overlay Lab
                 </span>
             </div>
 
