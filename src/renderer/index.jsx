@@ -2,20 +2,22 @@ import './Features/common/assets/main.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import Overlay from '../overlay/overlay.jsx'
 import App from './App'
 
 // Check if this is a widget request or setup request
 const urlParams = new URLSearchParams(window.location.search);
-const isWidget = urlParams.get('widget') === 'true';
+const windowName = urlParams.get('windowName');
 
-console.log('MAIN RENDERER INDEX.JSX LOADED!', isWidget ? 'WIDGET MODE' : 'MAIN APP MODE');
 
-if (isWidget) {
+console.log('Window Name:', windowName);
+
+if (windowName === 'overlay-window') {
   // Load widget components
-  import('../overlay/widget-main.jsx').then(({ default: WidgetApp }) => {
+  import('../overlay/overlay.jsx').then(({ default: WidgetApp }) => {
     createRoot(document.getElementById('root')).render(
       <StrictMode>
-        <WidgetApp />
+        <Overlay />
       </StrictMode>
     )
   });

@@ -468,7 +468,7 @@ function createWidgetWindow() {
   // Load the widget window with proper React support
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     const baseUrl = process.env['ELECTRON_RENDERER_URL'];
-    const widgetUrl = baseUrl.endsWith('/') ? baseUrl + '?widget=true' : baseUrl + '/?widget=true';
+    const widgetUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=overlay-window' : baseUrl + '/?windowName=overlay-window';
     logger.debug('Loading widget from URL', { url: widgetUrl });
     widgetWindow.window.loadURL(widgetUrl).catch((error) => {
       logger.error('Failed to load widget URL', error);
@@ -476,7 +476,7 @@ function createWidgetWindow() {
   } else {
     const widgetPath = join(__dirname, '../renderer/index.html');
     logger.debug('Loading widget from file', { path: widgetPath });
-    widgetWindow.window.loadFile(widgetPath, { query: { widget: 'true' } }).catch((error) => {
+    widgetWindow.window.loadFile(widgetPath, { query: { windowName: 'overlay-window' } }).catch((error) => {
       logger.error('Failed to load widget file', error);
     });
 
@@ -547,12 +547,14 @@ function createMainAndWidgetWindows() {
 
   // Loading HTML and Configuring the Main Window
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    logger.debug('Loading main window from URL', { url: process.env['ELECTRON_RENDERER_URL'] });
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    const baseUrl = process.env['ELECTRON_RENDERER_URL'];
+    const mainUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=main-window' : baseUrl + '/?windowName=main-window';
+    logger.debug('Loading main window from URL', { url: mainUrl });
+    mainWindow.loadURL(mainUrl);
   } else {
     const mainPath = join(__dirname, '../renderer/index.html');
     logger.debug('Loading main window from file', { path: mainPath });
-    mainWindow.loadFile(mainPath);
+    mainWindow.loadFile(mainPath, { query: { windowName: 'main-window' } });
   }
 
   mainWindow.setMenuBarVisibility(false);
