@@ -6,9 +6,9 @@
     <!-- <link rel="stylesheet" href="../assets/styles.css" /> -->
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; worker-src blob:; connect-src 'self' http://127.0.0.1 http://127.0.0.1:80 http://127.0.0.1:12672 http://localhost http://localhost:80 http://localhost:12672 http://127.0.0.1:8000 http://leadflow.api.overlaylab.studio https://leadflow.api.overlaylab.studio ws://localhost:12672 ws://127.0.0.1:8000 wss://localhost:12672; frame-src 'self';"
-    />
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://*.clerk.com; style-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://*.clerk.com; img-src 'self' data: https://*.clerk.accounts.dev https://*.clerk.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.com http://127.0.0.1 http://127.0.0.1:80 http://127.0.0.1:12672 http://localhost http://localhost:80 http://localhost:12672 http://127.0.0.1:8000 http://leadflow.api.overlaylab.studio https://leadflow.api.overlaylab.studio ws://localhost:12672 ws://127.0.0.1:8000 wss://localhost:12672; frame-src 'self' https://*.clerk.accounts.dev https://*.clerk.com; worker-src blob:;"
+/>
   </head>
 
   <body>
