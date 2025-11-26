@@ -6,7 +6,7 @@ import Overlay from '../overlay/overlay.jsx'
 import Main from './Main.jsx'
 
 import { API_CONFIG } from '../config/api.js'
- import { ClerkProvider } from '@clerk/clerk-react'
+import { ClerkProvider } from '@clerk/clerk-react'
 
 
 
