@@ -7,8 +7,10 @@ import icon from './resources/icon.png?asset'
 
 const {spawn, exec} = require('child_process');
 const fs = require('fs');
+const http = require('http');
 
 const path = require('path');
+const { extname } = require('path');
 
 const {autoUpdater, AppUpdater} = require('electron-differential-updater');
 const log = require('electron-log');
@@ -140,7 +142,119 @@ const isDev = process.env.NODE_ENV === 'development';
 // Variables and constants END !!! ---------------------------------------------------------------------------------------------------
 
 
+// HTTP Server for Window Loading !!! ---------------------------------------------------------------------------------------------------
 
+let server = null;
+
+// MIME type mapping
+const mimeTypes = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm'
+};
+
+function getMimeType(filePath) {
+  const ext = extname(filePath).toLowerCase();
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+function createServer() {
+  // If server already exists, resolve immediately
+  if (server) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const rendererPath = join(__dirname, '../renderer');
+
+    server = http.createServer((req, res) => {
+      let filePath = rendererPath;
+      // Remove query string and hash from URL for file path resolution
+      const urlPath = (req.url || '/').split('?')[0].split('#')[0];
+      const url = urlPath;
+
+      // Handle root path
+      if (url === '/' || url === '/index.html') {
+        filePath = join(rendererPath, 'index.html');
+      } else {
+        // Handle other paths (assets, etc.)
+        // Remove leading slash for path joining
+        const cleanPath = url.startsWith('/') ? url.slice(1) : url;
+        filePath = join(rendererPath, cleanPath);
+      }
+
+      // Security: prevent directory traversal
+      if (!filePath.startsWith(rendererPath)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+
+      // Check if the requested URL is an asset file (has a file extension)
+      const urlExt = extname(url).toLowerCase();
+      const isAssetFile = urlExt !== '' && urlExt !== '.html';
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          if (err.code === 'ENOENT') {
+            // If it's an asset file (JS, CSS, images, etc.) and doesn't exist, return 404
+            if (isAssetFile) {
+              res.writeHead(404, { 'Content-Type': 'text/plain' });
+              res.end('Not found');
+              return;
+            }
+            // For SPA routing: if it's a route (no extension or .html), serve index.html
+            // This allows React Router to handle client-side routing
+            const indexPath = join(rendererPath, 'index.html');
+            fs.readFile(indexPath, (indexErr, indexData) => {
+              if (indexErr) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not found');
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(indexData);
+            });
+          } else {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Server error');
+          }
+          return;
+        }
+
+        const mimeType = getMimeType(filePath);
+        res.writeHead(200, { 'Content-Type': mimeType });
+        res.end(data);
+      });
+    });
+
+    server.listen(19029, '127.0.0.1', () => {
+      logger.info('HTTP server running on http://127.0.0.1:19029');
+      resolve();
+    });
+
+    server.on('error', (err) => {
+      logger.error('HTTP server error:', err);
+      reject(err);
+    });
+  });
+}
+
+// HTTP Server for Window Loading END !!! ---------------------------------------------------------------------------------------------------
 
 
 // IPC On Section !!! ------------------------------------------------------------------------------------------------------
@@ -446,7 +560,7 @@ class UndetectableWidgetWindow {
 
 // Undetectable Widget Window Class END !!! ---------------------------------------------------------------------------------------------------
 
-function createWidgetWindow() {
+async function createWidgetWindow() {
   // Check if widget window already exists and is not destroyed
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     logger.info('Widget window already exists, focusing it');
@@ -474,10 +588,12 @@ function createWidgetWindow() {
       logger.error('Failed to load widget URL', error);
     });
   } else {
-    const widgetPath = join(__dirname, '../renderer/index.html');
-    logger.debug('Loading widget from file', { path: widgetPath });
-    widgetWindow.window.loadFile(widgetPath, { query: { windowName: 'overlay-window' } }).catch((error) => {
-      logger.error('Failed to load widget file', error);
+    // Ensure HTTP server is created, then load via HTTP
+    await createServer();
+    const widgetUrl = 'http://127.0.0.1:19029/?windowName=overlay-window';
+    logger.debug('Loading widget from HTTP server', { url: widgetUrl });
+    widgetWindow.window.loadURL(widgetUrl).catch((error) => {
+      logger.error('Failed to load widget from HTTP server', error);
     });
 
     widgetWindow.window.setMenuBarVisibility(false);
@@ -522,7 +638,7 @@ function recreateWidgetWindow() {
 }
 
 // Function to create main and widget windows
-function createMainAndWidgetWindows() {
+async function createMainAndWidgetWindows() {
   logger.info('Creating main and widget windows');
   
   // Creating Main Window
@@ -552,9 +668,11 @@ function createMainAndWidgetWindows() {
     logger.debug('Loading main window from URL', { url: mainUrl });
     mainWindow.loadURL(mainUrl);
   } else {
-    const mainPath = join(__dirname, '../renderer/index.html');
-    logger.debug('Loading main window from file', { path: mainPath });
-    mainWindow.loadFile(mainPath, { query: { windowName: 'main-window' } });
+    // Start HTTP server and load via HTTP to ensure window.location.protocol is 'http:'
+    await createServer();
+    const mainUrl = 'http://127.0.0.1:19029/?windowName=main-window';
+    logger.debug('Loading main window from HTTP server', { url: mainUrl });
+    mainWindow.loadURL(mainUrl);
   }
 
   mainWindow.setMenuBarVisibility(false);
@@ -3184,6 +3302,19 @@ app.on('will-quit' , async (event) => {
     }
 
     // setupWindow removed; no cleanup required
+
+    // Clean up HTTP server
+    if (server) {
+      try {
+        logger.debug('Closing HTTP server');
+        server.close(() => {
+          logger.info('HTTP server closed');
+        });
+        server = null;
+      } catch (error) {
+        logger.error('Error closing HTTP server during quit', error);
+      }
+    }
 
     logger.debug('Unregistering all global shortcuts');
     try {
