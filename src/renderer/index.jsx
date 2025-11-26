@@ -3,7 +3,7 @@ import './Features/common/assets/main.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import Overlay from '../overlay/overlay.jsx'
-import App from './App'
+import Main from './Main.jsx'
 
 // Check if this is a widget request or setup request
 const urlParams = new URLSearchParams(window.location.search);
@@ -25,7 +25,7 @@ if (windowName === 'overlay-window') {
   // Load main app
   createRoot(document.getElementById('root')).render(
     <StrictMode>
-      <App />
+      <Main />
     </StrictMode>
   )
 }
