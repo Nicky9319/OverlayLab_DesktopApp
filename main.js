@@ -3107,7 +3107,7 @@ app.whenReady().then(async () => {
   // Skip in development or when the app isn't packaged to avoid HTTP errors
   // (e.g., no macOS release present) and unhandled promise rejections.
   const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
-  if (!isDev || app.isPackaged) {
+  if (isDev || app.isPackaged) {
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'Nicky9319',
