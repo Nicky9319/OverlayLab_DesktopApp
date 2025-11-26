@@ -585,7 +585,7 @@ function createMainAndWidgetWindows() {
 
   // Register Protocol with the Windows
   if (process.platform === 'win32') {
-    const urlArg = process.argv.find(arg => arg.startsWith('agentbed://'));
+    const urlArg = process.argv.find(arg => arg.startsWith('overlaylab://'));
     if (urlArg) {
       logger.info('Protocol URL found in arguments', { url: urlArg });
       mainWindow.webContents.once('did-finish-load', () => {
@@ -2956,7 +2956,7 @@ async function handleEvent(eventInfo) {
 
 async function handleWebEventTrigger(url) {
   logger.info("Web event triggered", { url });
-  let eventInfo = url.replace(/^agentbed:\/\//i, '');
+  let eventInfo = url.replace(/^overlaylab:\/\//i, '');
 
   if (eventInfo.endsWith('/')) {
     eventInfo = eventInfo.slice(0, -1);
@@ -2965,10 +2965,10 @@ async function handleWebEventTrigger(url) {
   try {
     const decoded = decodeURIComponent(eventInfo);
     const parsed = JSON.parse(decoded);
-    logger.info('Received AgentBed event', parsed);
+    logger.info('Received OverlayLab event', parsed);
     await handleEvent(parsed);
   } catch (e) {
-    logger.error('Failed to parse AgentBed event', { eventInfo, error: e.message });
+    logger.error('Failed to parse OverlayLab event', { eventInfo, error: e.message });
   }
 
 }
@@ -2982,7 +2982,7 @@ async function handleWebEventTrigger(url) {
 // App Section !!! -------------------------------------------------------------------------------------
 
 app.on('second-instance', (event, argv) => {
-  const urlArg = argv.find(arg => arg.startsWith('agentbed://'));
+  const urlArg = argv.find(arg => arg.startsWith('overlaylab://'));
   if (urlArg) {
     logger.info('Second instance with protocol', { url: urlArg });
     if (mainWindow) {
@@ -3130,6 +3130,12 @@ app.whenReady().then(async () => {
 
   // Register Protocol with the Windows
   // Note: Protocol handling will be set up after main window is created
+  if (!app.isDefaultProtocolClient('overlaylab')) {
+    app.setAsDefaultProtocolClient('overlaylab');
+    logger.info('Registered overlaylab:// protocol handler');
+  } else {
+    logger.info('overlaylab:// protocol handler already registered');
+  }
 
 });
 
