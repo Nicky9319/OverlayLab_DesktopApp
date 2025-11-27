@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { UserButton, useAuth } from '@clerk/clerk-react';
 import { clearToken, setCustomerId } from '../../../../utils/clerkTokenProvider';
 import { authenticateCustomerId } from '../../../../services/authService';
@@ -14,9 +15,14 @@ const MainPage = () => {
     const hasAuthenticatedBackend = useRef(false);
     const authenticationAttempts = useRef(0);
     const maxRetries = 5;
+    const navigate = useNavigate();
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
+    };
+
+    const handleBackToDashboard = () => {
+        navigate('/');
     };
 
     // Expose clearToken globally for UserButton callback
@@ -136,7 +142,50 @@ const MainPage = () => {
             <LeftNavBar activeTab={activeTab} onTabChange={handleTabChange} />
             <div className="content-area">
                 <header className="page-header">
-                    <h1 className="page-title">Lead Flow</h1>
+                    <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: '16px'
+                    }}>
+                        <button
+                            onClick={handleBackToDashboard}
+                            style={{
+                                padding: '8px 16px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                backgroundColor: '#1C1C1E',
+                                color: '#FFFFFF',
+                                border: '1px solid #2D2D2F',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s, border-color 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#2D2D2F';
+                                e.target.style.borderColor = '#007AFF';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#1C1C1E';
+                                e.target.style.borderColor = '#2D2D2F';
+                            }}
+                        >
+                            <svg 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2"
+                            >
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                            Back to Dashboard
+                        </button>
+                        <h1 className="page-title">Lead Flow</h1>
+                    </div>
                     <div style={{ 
                         display: 'flex', 
                         alignItems: 'center',

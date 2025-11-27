@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import iconImage from '../../assets/icon.png';
 
 const Taskbar = () => {
     const [showContextMenu, setShowContextMenu] = useState(false);
@@ -167,13 +168,23 @@ const Taskbar = () => {
                 </button>
             </div>
 
-            {/* Center - App Title */}
-            <div className="absolute left-1/2 transform -translate-x-1/2">
+            {/* Center - App Title with Logo */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2">
+                <img 
+                    src={iconImage}
+                    alt="Overlay Labs" 
+                    style={{ 
+                        width: '16px', 
+                        height: '16px',
+                        objectFit: 'contain',
+                        display: 'block'
+                    }}
+                />
                 <span 
                     className="text-xs font-medium"
-                    style={{ color: '#8E8E93' }}
+                    style={{ color: '#007AFF' }}
                 >
-                    Overlay Lab
+                    Overlay Labs
                 </span>
             </div>
 
@@ -182,7 +193,7 @@ const Taskbar = () => {
                 {appVersion && (
                     <span 
                         className="text-xs font-medium"
-                        style={{ color: '#8E8E93' }}
+                        style={{ color: '#007AFF' }}
                     >
                         v{appVersion}
                     </span>

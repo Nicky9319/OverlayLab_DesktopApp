@@ -60,6 +60,7 @@ if (process.contextIsolated) {
       downloadUpdate: () => ipcRenderer.invoke('update:download'),
       restartAndInstall: () => ipcRenderer.invoke('update:restart'),
       getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+      getResourcePath: (relativePath) => ipcRenderer.invoke('app:getResourcePath', relativePath),
       removeUpdateListeners: () => {
         ipcRenderer.removeAllListeners('update:checking')
         ipcRenderer.removeAllListeners('update:available')
@@ -223,5 +224,9 @@ else{
     broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
     onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
     removeReduxBroadcastListener: () => ipcRenderer.removeAllListeners('redux-action-broadcast'),
+    
+    // Settings API
+    getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
+    setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
   }
 }

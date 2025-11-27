@@ -3,6 +3,7 @@ import { Provider } from 'react-redux'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { store } from '../store/store'
 import MainPage from './Features/main/components/mainPage'
+import Dashboard from './Features/dashboard/Dashboard'
 import LogoutPage from '../auth/LogoutPage'
 import './Features/common/assets/main.css'
 // import AuthPage from './Features/auth/components/authPage'
@@ -19,6 +20,19 @@ function App() {
         <Routes>
           <Route
             path="/"
+            element={
+              <>
+                <SignedIn>
+                  <Dashboard />
+                </SignedIn>
+                <SignedOut>
+                  <LogoutPage />
+                </SignedOut>
+              </>
+            }
+          />
+          <Route
+            path="/leadflow"
             element={
               <>
                 <SignedIn>

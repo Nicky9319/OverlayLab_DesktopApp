@@ -1666,6 +1666,11 @@ ipcMain.handle('app:getVersion', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('app:getResourcePath', (event, relativePath) => {
+  const path = require('path');
+  return path.join(__dirname, '..', 'resources', relativePath).replace(/\\/g, '/');
+});
+
 // WSL Setup APIs
 ipcMain.handle('installWSL', async () => {
   try {
