@@ -17,6 +17,7 @@ if (process.contextIsolated) {
       quitApp: () => ipcRenderer.invoke('window:quit'),
       minimizeApp: () => ipcRenderer.invoke('window:minimize'),
       maximizeApp: () => ipcRenderer.invoke('window:maximize'),
+      signOut: () => ipcRenderer.invoke('auth:signOut'),
       enableInteraction: () => ipcRenderer.invoke('window:enableInteraction'),
       disableInteraction: () => ipcRenderer.invoke('window:disableInteraction'),
       setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('widget:setIgnoreMouseEvents', ignore),

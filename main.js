@@ -1,6 +1,6 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
@@ -91,7 +91,9 @@ ipcMain.handle('broadcast-redux-action', (event, actionData) => {
 
 // Variables and constants !!! ---------------------------------------------------------------------------------------------------
 
-let mainWindow, store, widgetWindow, tray;
+let mainWindow, store, widgetWindow, tray, authWindow;
+let authToken = null; // Store the authentication token
+let isRestartingAuth = false; // Flag to track if we're restarting the auth flow
 let ipAddress = process.env.SERVER_IP_ADDRESS || '';
 let widgetUndetectabilityEnabled = true; // Enable undetectability for widget by default
 let lastScreenshotTime = 0; // Cooldown tracking for global shortcut
@@ -560,6 +562,221 @@ class UndetectableWidgetWindow {
 
 // Undetectable Widget Window Class END !!! ---------------------------------------------------------------------------------------------------
 
+// Auth Window Creation Function !!! ---------------------------------------------------------------------------------------------------
+
+let authCompletePromise = null;
+let authCompleteResolver = null;
+
+function createAuthWindow() {
+  return new Promise((resolve, reject) => {
+    // If auth window already exists, focus it
+    if (authWindow && !authWindow.isDestroyed()) {
+      logger.info('Auth window already exists, focusing it');
+      authWindow.focus();
+      // Return existing promise if available
+      if (authCompletePromise) {
+        authCompletePromise.then(resolve).catch(reject);
+      } else {
+        resolve({ success: false, message: 'Auth window exists but no promise available' });
+      }
+      return;
+    }
+
+    // Create promise for auth completion
+    authCompletePromise = new Promise((innerResolve) => {
+      authCompleteResolver = innerResolve;
+    });
+    
+    // Chain the promise resolution
+    authCompletePromise.then(resolve).catch(reject);
+
+    logger.info('Creating auth window');
+
+    // Create auth window
+    authWindow = new BrowserWindow({
+      width: 500,
+      height: 700,
+      show: false,
+      frame: false,
+      autoHideMenuBar: true,
+      icon: icon,
+      webPreferences: {
+        preload: join(__dirname, '../preload/preload.js'),
+        sandbox: false,
+        contextIsolation: true,
+        devTools: true,
+      },
+      modal: true,
+      resizable: false,
+    });
+
+    authWindow.on('ready-to-show', () => {
+      authWindow.show();
+      authWindow.focus();
+    });
+
+    // Load auth window
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      const baseUrl = process.env['ELECTRON_RENDERER_URL'];
+      const authUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=auth-window' : baseUrl + '/?windowName=auth-window';
+      logger.debug('Loading auth window from URL', { url: authUrl });
+      authWindow.loadURL(authUrl);
+    } else {
+      // Ensure HTTP server is created, then load via HTTP
+      createServer().then(() => {
+        const authUrl = 'http://127.0.0.1:19029/?windowName=auth-window';
+        logger.debug('Loading auth window from HTTP server', { url: authUrl });
+        authWindow.loadURL(authUrl);
+      }).catch((error) => {
+        logger.error('Failed to create server for auth window', error);
+        reject(error);
+      });
+    }
+
+    // Handle window close - if closed before auth, reject
+    authWindow.on('closed', () => {
+      if (authCompleteResolver) {
+        logger.warn('Auth window closed before authentication completed');
+        authWindow = null;
+        authCompleteResolver = null;
+      }
+    });
+  });
+}
+
+// Function to restart authentication flow
+async function restartAuthFlow() {
+  logger.info('Restarting authentication flow - destroying windows and reopening auth window');
+  
+  // Set flag to prevent app from quitting
+  isRestartingAuth = true;
+  
+  // Clear stored token
+  authToken = null;
+  
+  // Clear auth resolver if it exists
+  authCompleteResolver = null;
+  authCompletePromise = null;
+  
+  // Create auth window FIRST to prevent app from quitting when other windows close
+  logger.info('Creating new auth window after sign out');
+  
+  // Start creating the auth window - the BrowserWindow object is created synchronously
+  // so it will exist immediately, preventing app quit
+  const authWindowPromise = createAuthWindow();
+  
+  // Wait a moment for the window to be created (BrowserWindow is created synchronously,
+  // but we wait a bit to ensure it's ready)
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  // Now destroy other windows - auth window already exists
+  // Destroy widget window
+  if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed()) {
+    try {
+      logger.info('Destroying widget window for auth restart');
+      widgetWindow.window.destroy();
+      widgetWindow = null;
+    } catch (error) {
+      logger.error('Error destroying widget window during auth restart', error);
+    }
+  }
+  
+  // Destroy main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      logger.info('Destroying main window for auth restart');
+      mainWindow.destroy();
+      mainWindow = null;
+    } catch (error) {
+      logger.error('Error destroying main window during auth restart', error);
+    }
+  }
+  
+  // Handle auth completion in the background
+  authWindowPromise
+    .then((authResult) => {
+      // Clear the flag after auth completes
+      isRestartingAuth = false;
+      
+      if (authResult && authResult.success) {
+        logger.info('Re-authentication successful, creating main and widget windows');
+        createMainAndWidgetWindows();
+      } else {
+        logger.error('Re-authentication failed or was cancelled');
+        isRestartingAuth = false;
+        app.quit();
+      }
+    })
+    .catch((error) => {
+      logger.error('Error in auth window promise', error);
+      isRestartingAuth = false;
+      app.quit();
+    });
+  
+  // Note: We don't await the authWindowPromise here - the window is already created
+  // and will prevent app quit. The promise resolves when auth completes.
+}
+
+// IPC handler for sign out
+ipcMain.handle('auth:signOut', async () => {
+  logger.info('Sign out requested');
+  await restartAuthFlow();
+  return { success: true };
+});
+
+// IPC handler for auth completion
+ipcMain.on('auth-complete', async (event, tokenOrData) => {
+  // Handle both direct token string and object with token property
+  let token = null;
+  
+  if (typeof tokenOrData === 'string') {
+    // Direct token string
+    token = tokenOrData;
+  } else if (tokenOrData && typeof tokenOrData === 'object') {
+    // Handle different payload structures:
+    // - { token: "..." }
+    // - { payload: { token: "..." } }
+    token = tokenOrData.token || (tokenOrData.payload && tokenOrData.payload.token);
+  }
+  
+  logger.info('Auth complete received, token:', token ? 'present' : 'missing');
+  logger.debug('Token data structure:', { 
+    type: typeof tokenOrData, 
+    isString: typeof tokenOrData === 'string',
+    hasToken: !!(tokenOrData && tokenOrData.token),
+    hasPayload: !!(tokenOrData && tokenOrData.payload)
+  });
+  
+  if (!token) {
+    logger.error('Auth complete received but no token found in payload', { tokenOrData });
+    return;
+  }
+  
+  // Store the token globally for use in API calls
+  authToken = token;
+  logger.info('Authentication token stored successfully');
+  
+  if (authCompleteResolver) {
+    // Resolve the auth promise with success
+    logger.info('Resolving auth promise and closing auth window');
+    authCompleteResolver({ token, success: true });
+    authCompleteResolver = null;
+    
+    // Close auth window after a brief delay to ensure message is processed
+    setTimeout(() => {
+      if (authWindow && !authWindow.isDestroyed()) {
+        logger.info('Closing auth window after successful authentication');
+        authWindow.close();
+        authWindow = null;
+      }
+    }, 200);
+  } else {
+    logger.warn('Auth complete received but no resolver available - auth window may have been closed');
+  }
+});
+
+// Auth Window Creation Function END !!! ---------------------------------------------------------------------------------------------------
+
 async function createWidgetWindow() {
   // Check if widget window already exists and is not destroyed
   if (widgetWindow && !widgetWindow.isDestroyed()) {
@@ -659,6 +876,19 @@ async function createMainAndWidgetWindows() {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
+    
+    // Check for updates only after main window is ready and shown
+    // This ensures updates are checked in the main window, not the auth window
+    // Only check for updates in production builds (packaged apps)
+    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
+    if ((app.isPackaged || isDev) && autoUpdater) {
+      logger.info('[AutoUpdater] Main window ready, checking for updates...');
+      autoUpdater.checkForUpdates().catch((e) => {
+        logger.warn('[AutoUpdater] Failed to check for updates:', e);
+      });
+    } else {
+      logger.debug('[AutoUpdater] Skipping update check - not in production build or dev mode');
+    }
   });
 
   // Loading HTML and Configuring the Main Window
@@ -1131,7 +1361,20 @@ ipcMain.handle('window:quit', () => {
   // Set quitting flag to prevent window close event from hiding the window
   app.isQuiting = true;
   
-  // Clean up widget window first
+  // Clean up auth window first if it exists
+  if (authWindow) {
+    try {
+      if (!authWindow.isDestroyed()) {
+        logger.info('Destroying auth window from IPC quit');
+        authWindow.destroy();
+      }
+      authWindow = null;
+    } catch (error) {
+      logger.error('Error destroying auth window during IPC quit:', error);
+    }
+  }
+  
+  // Clean up widget window
   if (widgetWindow) {
     try {
       if (!widgetWindow.isDestroyed()) {
@@ -1176,8 +1419,15 @@ ipcMain.handle('window:quit', () => {
 });
 
 ipcMain.handle('window:minimize', () => {
-  if (mainWindow) {
+  // If auth window exists and is not destroyed, minimize it
+  if (authWindow && !authWindow.isDestroyed()) {
+    logger.debug('Minimizing auth window');
+    authWindow.minimize();
+  } else if (mainWindow && !mainWindow.isDestroyed()) {
+    logger.debug('Minimizing main window');
     mainWindow.minimize();
+  } else {
+    logger.warn('No window available to minimize');
   }
 });
 
@@ -1560,13 +1810,26 @@ ipcMain.handle('sendToMain', async (event, eventName, payload) => {
   try {
     logger.info('Sending event to main window', { eventName, payload });
     
+    // Special handling for auth-complete - forward to auth handler
+    if (eventName === 'auth-complete') {
+      logger.info('Auth-complete event received via sendToMain, forwarding to auth handler');
+      logger.debug('Auth payload structure:', { payload, hasToken: !!(payload && payload.token) });
+      // Pass the payload object to the auth-complete handler - it will extract the token
+      // The payload structure is { token: "..." }
+      ipcMain.emit('auth-complete', event, payload);
+      return { success: true };
+    }
+    
     // Just send the event directly to main window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('eventFromWidget', { eventName, payload });
       logger.info('Event sent to main window successfully');
       return { success: true };
     } else {
-      logger.warn('Main window not available, event not sent');
+      // Only warn if it's not during auth flow (when main window shouldn't exist yet)
+      if (eventName !== 'auth-complete' && !authWindow) {
+        logger.warn('Main window not available, event not sent');
+      }
       return { success: false, error: 'Main window not available' };
     }
   } catch (error) {
@@ -3115,6 +3378,42 @@ app.whenReady().then(async () => {
 
   // Initialize quitting flag
   app.isQuiting = false;
+
+  // Fix CORS issues with duplicate headers by intercepting responses
+  const defaultSession = session.defaultSession;
+  
+  defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    // Fix duplicate Access-Control-Allow-Origin headers
+    if (details.responseHeaders && details.responseHeaders['access-control-allow-origin']) {
+      const origins = details.responseHeaders['access-control-allow-origin'];
+      if (Array.isArray(origins) && origins.length > 1) {
+        // Keep only the first value
+        details.responseHeaders['access-control-allow-origin'] = [origins[0]];
+        logger.debug('Fixed duplicate Access-Control-Allow-Origin header', { 
+          original: origins, 
+          fixed: origins[0] 
+        });
+      }
+    }
+    
+    // Also fix other duplicate CORS headers
+    const corsHeaders = [
+      'access-control-allow-methods',
+      'access-control-allow-headers',
+      'access-control-allow-credentials'
+    ];
+    
+    corsHeaders.forEach(header => {
+      if (details.responseHeaders && details.responseHeaders[header]) {
+        const values = details.responseHeaders[header];
+        if (Array.isArray(values) && values.length > 1) {
+          details.responseHeaders[header] = [values[0]];
+        }
+      }
+    });
+    
+    callback({ responseHeaders: details.responseHeaders });
+  });
   
 
   // Single Instance Check 
@@ -3220,14 +3519,30 @@ app.whenReady().then(async () => {
 
   // Create main and widget windows directly (ensure windows exist before updater events)
   logger.info('Creating initial main and widget windows');
-  createMainAndWidgetWindows();
+  // Start with authentication flow
+  createAuthWindow()
+    .then((authResult) => {
+      if (authResult && authResult.success) {
+        logger.info('Authentication successful, creating main and widget windows');
+        createMainAndWidgetWindows();
+      } else {
+        logger.error('Authentication failed or was cancelled');
+        app.quit();
+      }
+    })
+    .catch((error) => {
+      logger.error('Error during authentication flow', error);
+      app.quit();
+    });
 
   // Configure auto-updater feed URL (GitHub releases)
   // Configure and run auto-updater only in production (packaged app).
   // Skip in development or when the app isn't packaged to avoid HTTP errors
   // (e.g., no macOS release present) and unhandled promise rejections.
+  // NOTE: Update checks will be triggered after main window is created, not here
+  // to ensure they only run in the main window, not the auth window
   const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
-  if (isDev || app.isPackaged) {
+  if (app.isPackaged || !isDev) {
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'Nicky9319',
@@ -3240,12 +3555,11 @@ app.whenReady().then(async () => {
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
-    // Check for updates on startup (don't block window creation)
-    autoUpdater.checkForUpdates().catch((e) => {
-      logger.warn('[AutoUpdater] Failed to check for updates:', e);
-    });
+    // Don't check for updates here - wait until main window is created
+    // This ensures updates are only checked in the main window, not the auth window
+    logger.info('[AutoUpdater] Auto-updater configured. Will check for updates after main window is created.');
   } else {
-    logger.info('[AutoUpdater] Skipping auto-updater in development/unpackaged mode');
+    logger.info('[AutoUpdater] Skipping auto-updater configuration - not in production build or dev mode');
   }
 
   // Register Protocol with the Windows
@@ -3261,7 +3575,8 @@ app.whenReady().then(async () => {
 
 app.on('will-quit' , async (event) => {
   // Don't prevent quit if we're already in quitting state
-  if (!app.isQuiting) {
+  // Also don't prevent quit if we're restarting auth (auth window will be created)
+  if (!app.isQuiting && !isRestartingAuth) {
     event.preventDefault();
     logger.info("Application quitting, cleaning up resources");
 

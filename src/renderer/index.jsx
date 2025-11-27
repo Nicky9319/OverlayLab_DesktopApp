@@ -2,11 +2,29 @@ import './Features/common/assets/main.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, useNavigate } from 'react-router-dom'
 import Overlay from '../overlay/overlay.jsx'
 import Main from './Main.jsx'
+import AuthPage from './Features/auth/components/AuthPage.jsx'
+import TokenProviderInitializer from '../utils/TokenProviderInitializer.jsx'
 
 import { API_CONFIG } from '../config/api.js'
 import { ClerkProvider } from '@clerk/clerk-react'
+
+// Wrapper component to provide navigation to ClerkProvider
+function ClerkProviderWithRouter({ children, publishableKey }) {
+  const navigate = useNavigate();
+  
+  return (
+    <ClerkProvider 
+      publishableKey={publishableKey}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
+    >
+      {children}
+    </ClerkProvider>
+  );
+}
 
 
 
@@ -23,17 +41,32 @@ if (windowName === 'overlay-window') {
     createRoot(document.getElementById('root')).render(
       <StrictMode>
         <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-          <Overlay />
+          <TokenProviderInitializer>
+            <Overlay />
+          </TokenProviderInitializer>
         </ClerkProvider>
       </StrictMode>
     )
   });
+} else if (windowName === 'auth-window') {
+  // Load auth page with routing support
+  createRoot(document.getElementById('root')).render(
+    <StrictMode>
+      <BrowserRouter>
+        <ClerkProviderWithRouter publishableKey={PUBLISHABLE_KEY}>
+          <AuthPage />
+        </ClerkProviderWithRouter>
+      </BrowserRouter>
+    </StrictMode>
+  )
 } else {
   // Load main app
   createRoot(document.getElementById('root')).render(
     <StrictMode>
       <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-        <Main />
+        <TokenProviderInitializer>
+          <Main />
+        </TokenProviderInitializer>
       </ClerkProvider>
     </StrictMode>
   )
