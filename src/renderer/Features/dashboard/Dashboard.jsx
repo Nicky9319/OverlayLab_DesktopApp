@@ -14,8 +14,7 @@ const Dashboard = () => {
         <div className="main-container" style={{ 
             height: '100vh', 
             display: 'flex', 
-            flexDirection: 'column',
-            backgroundColor: '#000000'
+            flexDirection: 'column'
         }}>
             <Taskbar />
             <div style={{ 
