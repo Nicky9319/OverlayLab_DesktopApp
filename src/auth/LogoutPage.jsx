@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { clearToken } from '../../../../utils/clerkTokenProvider';
+import { clearToken } from '../utils/clerkTokenProvider';
 
 const LogoutPage = () => {
   const [dots, setDots] = useState('');

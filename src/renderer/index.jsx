@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, useNavigate } from 'react-router-dom'
 import Overlay from '../overlay/overlay.jsx'
 import Main from './Main.jsx'
-import AuthPage from './Features/auth/components/AuthPage.jsx'
+import AuthPage from '../auth/AuthPage.jsx'
 import TokenProviderInitializer from '../utils/TokenProviderInitializer.jsx'
 
 import { API_CONFIG } from '../config/api.js'

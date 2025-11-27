@@ -3,7 +3,7 @@ import { Provider } from 'react-redux'
 import { SignedIn, SignedOut } from '@clerk/clerk-react'
 import { store } from '../store/store'
 import MainPage from './Features/main/components/mainPage'
-import LogoutPage from './Features/auth/components/LogoutPage'
+import LogoutPage from '../auth/LogoutPage'
 import './Features/common/assets/main.css'
 // import AuthPage from './Features/auth/components/authPage'
 
