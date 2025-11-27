@@ -5,7 +5,8 @@
 let tokenStore = {
   getToken: null, // Function to get token from Clerk
   currentToken: null,
-  tokenExpiry: null
+  tokenExpiry: null,
+  customerId: null // Store customerId after backend authentication
 };
 
 /**
@@ -50,16 +51,36 @@ export async function getClerkToken() {
 }
 
 /**
+ * Store customerId after successful backend authentication
+ * @param {string} customerId - The customer ID from backend
+ */
+export function setCustomerId(customerId) {
+  tokenStore.customerId = customerId;
+  console.log('CustomerId stored:', customerId);
+}
+
+/**
+ * Get the stored customerId
+ * @returns {string|null} The customer ID or null if not available
+ */
+export function getCustomerId() {
+  return tokenStore.customerId;
+}
+
+/**
  * Clear the cached token (useful on logout)
  */
 export function clearToken() {
   tokenStore.currentToken = null;
   tokenStore.tokenExpiry = null;
+  tokenStore.customerId = null;
 }
 
 export default {
   initializeTokenProvider,
   getClerkToken,
+  setCustomerId,
+  getCustomerId,
   clearToken
 };
 

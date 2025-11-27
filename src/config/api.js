@@ -6,9 +6,11 @@ import { ENV } from './envConfig';
 const SERVICE_URLS = {
   development: {
     LEADFLOW_SERVICE_URL: 'https://leadflow.api.overlaylab.studio',
+    AUTH_SERVICE_URL: 'https://api.overlaylab.studio',
   },
   production: {
     LEADFLOW_SERVICE_URL: 'https://leadflow.api.overlaylab.studio',
+    AUTH_SERVICE_URL: 'https://api.overlaylab.studio',
   }
 };
 
@@ -24,7 +26,9 @@ const ACTIVE = SERVICE_URLS[ENV] || SERVICE_URLS.production;
 // Export a single config object and direct named exports for convenience
 export const API_CONFIG = {
   LEADFLOW_SERVICE_URL: ACTIVE.LEADFLOW_SERVICE_URL,
+  AUTH_SERVICE_URL: ACTIVE.AUTH_SERVICE_URL,
   CLERK_PUBLISHABLE_KEY: CLERK_PUBLISHABLE_KEY[ENV] || CLERK_PUBLISHABLE_KEY.production
 };
 
 export const LEADFLOW_API_URL = API_CONFIG.LEADFLOW_SERVICE_URL;
+export const AUTH_API_URL = API_CONFIG.AUTH_SERVICE_URL;

@@ -357,9 +357,24 @@ const addLead = async (imageFile, bucketId = null) => {
     });
     logger.debug('addLead: Making POST request', { url, fileSize: imageFile.size });
     
+    // Get Clerk token for authentication
+    const token = await getClerkToken();
+    
+    // Build headers - don't set Content-Type for FormData (browser will set it with boundary)
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      logger.debug('addLead: Including Authorization header in request');
+    } else {
+      logger.warn('addLead: No Clerk token available for request');
+    }
+    
     const fetchOptions = {
       method: 'POST',
+      headers,
       body: formData,
+      mode: 'cors',
+      credentials: 'omit',
       // Don't set Content-Type header - let browser set it with boundary for FormData
     };
 

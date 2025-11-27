@@ -1,9 +1,14 @@
-// const ipAddress = "http://127.0.0.1:8000";
-const ipAddress = "http://206.189.128.242:8000";
-
 // Import renderer logger
 import { createLogger } from '../utils/rendererLogger';
 const logger = createLogger('LeadsService');
+
+// Import token provider
+import { getClerkToken } from '../utils/clerkTokenProvider';
+
+// Import API config
+import { LEADFLOW_API_URL } from '../config/api';
+
+const BASE_URL = LEADFLOW_API_URL;
 
 // Small helper to perform fetch and return a consistent shape:
 // { status_code: number, content: any }
@@ -165,13 +170,28 @@ const addLead = async (imageFile, bucketId = null) => {
       logger.debug('addLead: Added bucket_id to FormData', { bucketId });
     }
 
-    const url = `${ipAddress}/api/leadflow-service/leads/add-lead`;
+    const url = `${BASE_URL}/api/leadflow-service/leads/add-lead`;
     console.log('📤 leadsService.addLead: Making request to:', url);
     logger.debug('addLead: Making POST request', { url });
     
+    // Get Clerk token for authentication
+    const token = await getClerkToken();
+    
+    // Build headers - don't set Content-Type for FormData (browser will set it with boundary)
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      logger.debug('addLead: Including Authorization header in request');
+    } else {
+      logger.warn('addLead: No Clerk token available for request');
+    }
+    
     const fetchOptions = {
       method: 'POST',
+      headers,
       body: formData,
+      mode: 'cors',
+      credentials: 'omit',
       // Don't set Content-Type header - let browser set it with boundary for FormData
     };
 
