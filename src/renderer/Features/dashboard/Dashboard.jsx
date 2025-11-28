@@ -71,7 +71,6 @@ const Dashboard = () => {
                 padding: '40px',
                 height: '100%',
                 gap: '24px',
-                alignItems: 'center', // center children (including the inner div) in this whole right side div
                 width: '100%'
             }}>
                 <div style={{
