@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import Taskbar from '../taskbar/taskbar';
 import overlayLabIcon from '../../assets/icon.png';
+import leadflowLogo from '../../assets/leadflow_logo.png';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -69,20 +70,32 @@ const Dashboard = () => {
                 justifyContent: 'center',
                 padding: '40px',
                 height: '100%',
-                gap: '24px'
+                gap: '24px',
+                alignItems: 'center', // center children (including the inner div) in this whole right side div
+                width: '100%'
             }}>
                 <div style={{
                     maxWidth: '600px',
-                    textAlign: 'center'
+                    width: '100%',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
                 }}>
-                    <h2 style={{
-                        fontSize: '28px',
-                        fontWeight: '600',
-                        color: '#FFFFFF',
-                        marginBottom: '16px'
-                    }}>
-                        Leadflow
-                    </h2>
+                    <img 
+                        src={leadflowLogo} 
+                        alt="Leadflow Logo" 
+                        style={{
+                            maxWidth: '300px',
+                            width: '100%',
+                            height: 'auto',
+                            marginBottom: '32px',
+                            objectFit: 'contain',
+                            display: 'block',
+                            marginLeft: 'auto',
+                            marginRight: 'auto'
+                        }}
+                    />
                     <p style={{
                         fontSize: '16px',
                         color: '#8E8E93',
@@ -300,7 +313,9 @@ const Dashboard = () => {
                             transition: 'all 0.2s',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '12px'
+                            gap: '12px',
+                            position: 'relative',
+                            overflow: 'hidden'
                         }}
                         onMouseEnter={(e) => {
                             if (currentView !== 'leadflow') {
@@ -313,11 +328,26 @@ const Dashboard = () => {
                             }
                         }}
                     >
-                        <span style={{ fontSize: '20px' }}>📊</span>
+                        {/* Background logo */}
+                        
+                        {/* Small icon before text */}
+                        <img 
+                            src={leadflowLogo} 
+                            alt="Leadflow" 
+                            style={{
+                                width: '36px',
+                                height: '36px',
+                                objectFit: 'contain',
+                                zIndex: 1,
+                                flexShrink: 0
+                            }}
+                        />
                         <span style={{
                             fontSize: '16px',
                             fontWeight: currentView === 'leadflow' ? '600' : '400',
-                            color: '#FFFFFF'
+                            color: '#FFFFFF',
+                            zIndex: 1,
+                            position: 'relative'
                         }}>
                             Leadflow
                         </span>
