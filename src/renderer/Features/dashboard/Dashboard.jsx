@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import Taskbar from '../taskbar/taskbar';
+import overlayLabIcon from '../../assets/icon.png';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -333,7 +334,7 @@ const Dashboard = () => {
                 </div>
             </div>
             
-            {/* Bottom left - Settings and User buttons */}
+            {/* Bottom left - Logo and User buttons */}
             <div style={{
                 position: 'absolute',
                 bottom: '20px',
@@ -348,31 +349,41 @@ const Dashboard = () => {
                     style={{
                         width: '40px',
                         height: '40px',
-                        borderRadius: '50%',
-                        backgroundColor: currentView === 'settings' ? '#007AFF' : '#1C1C1E',
-                        border: 'none',
+                        borderRadius: '8px',
+                        backgroundColor: currentView === 'settings' ? '#007AFF' : 'transparent',
+                        border: currentView === 'settings' ? 'none' : '1px solid #1C1C1E',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        transition: 'background-color 0.2s',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        padding: '4px',
+                        overflow: 'hidden',
+                        transform: 'scale(1)'
                     }}
                     onMouseEnter={(e) => {
-                        if (currentView !== 'settings') {
-                            e.target.style.backgroundColor = '#2D2D2F';
-                        }
+                        e.currentTarget.style.transform = 'scale(1.2)';
+                        e.currentTarget.style.backgroundColor = currentView === 'settings' ? '#0056CC' : '#1C1C1E';
+                        e.currentTarget.style.borderColor = currentView === 'settings' ? '#0056CC' : '#007AFF';
                     }}
                     onMouseLeave={(e) => {
-                        if (currentView !== 'settings') {
-                            e.target.style.backgroundColor = '#1C1C1E';
-                        }
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.backgroundColor = currentView === 'settings' ? '#007AFF' : 'transparent';
+                        e.currentTarget.style.borderColor = currentView === 'settings' ? '#007AFF' : '#1C1C1E';
                     }}
                     title="Settings"
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
-                    </svg>
+                    <img 
+                        src={overlayLabIcon} 
+                        alt="OverlayLab Logo" 
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            borderRadius: '4px'
+                        }}
+                    />
                 </button>
                 <UserButton 
                     appearance={{
