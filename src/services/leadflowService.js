@@ -8,29 +8,80 @@ const BASE_URL = LEADFLOW_API_URL;
 import { createLogger } from '../utils/rendererLogger';
 const logger = createLogger('LeadFlowService');
 
+// Import token provider
+import { getClerkToken } from '../utils/clerkTokenProvider';
+
 // Small helper to perform fetch and return a consistent shape:
 // { status_code: number, content: any }
 const request = async (path, options = {}) => {
   const url = `${BASE_URL}${path}`;
+  
+  // Get Clerk token for authentication
+  const token = await getClerkToken();
+  
+  // Build headers
+  const headers = { 'Content-Type': 'application/json' };
+  
+  // Add Authorization header if token is available
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+    logger.debug('Including Authorization header in request');
+  } else {
+    logger.warn('No Clerk token available for request');
+  }
+  
   const fetchOptions = {
-    headers: { 'Content-Type': 'application/json' },
+    method: options.method || 'GET',
+    headers: {
+      ...headers,
+      ...(options.headers || {}),
+      // Ensure Authorization is always included if we have a token
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    },
+    // Add CORS mode for cross-origin requests
+    mode: 'cors',
+    credentials: 'omit', // Don't send cookies for CORS
     ...options,
+    // Override headers last to ensure Authorization is always included
+    headers: {
+      ...headers,
+      ...(options.headers || {}),
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
   };
 
   try {
-    logger.debug(`Making ${options.method || 'GET'} request to: ${url}`);
+    logger.debug(`Making ${fetchOptions.method} request to: ${url}`, { 
+      hasToken: !!token,
+      headers: Object.keys(fetchOptions.headers)
+    });
+    
     const resp = await fetch(url, fetchOptions);
+    
+    // Check if response is ok
+    if (!resp.ok) {
+      logger.warn(`Request to ${url} returned non-ok status: ${resp.status} ${resp.statusText}`);
+    }
+    
     let content;
     try {
       content = await resp.json();
     } catch (err) {
       // Non-JSON response
-      content = { detail: await resp.text() };
+      const textContent = await resp.text();
+      logger.warn(`Non-JSON response from ${url}`, { status: resp.status, text: textContent.substring(0, 200) });
+      content = { detail: textContent };
     }
 
-    logger.debug(`Response from ${url}:`, { status: resp.status, content });
+    logger.debug(`Response from ${url}:`, { status: resp.status, contentKeys: Object.keys(content || {}) });
     return { status_code: resp.status, content };
   } catch (error) {
+    // Handle CORS and network errors
+    if (error.message && error.message.includes('CORS')) {
+      logger.error(`CORS error while calling ${url}`, { error: error.message });
+      return { status_code: 403, content: { detail: 'CORS error: ' + error.message } };
+    }
+    
     console.error('Network error while calling', url, error);
     logger.error(`Network error while calling ${url}`, { error: error.message, stack: error.stack });
     // Keep a consistent return shape for network errors
@@ -306,9 +357,24 @@ const addLead = async (imageFile, bucketId = null) => {
     });
     logger.debug('addLead: Making POST request', { url, fileSize: imageFile.size });
     
+    // Get Clerk token for authentication
+    const token = await getClerkToken();
+    
+    // Build headers - don't set Content-Type for FormData (browser will set it with boundary)
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      logger.debug('addLead: Including Authorization header in request');
+    } else {
+      logger.warn('addLead: No Clerk token available for request');
+    }
+    
     const fetchOptions = {
       method: 'POST',
+      headers,
       body: formData,
+      mode: 'cors',
+      credentials: 'omit',
       // Don't set Content-Type header - let browser set it with boundary for FormData
     };
 

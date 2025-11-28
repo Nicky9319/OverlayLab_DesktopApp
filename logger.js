@@ -35,12 +35,19 @@ class Logger {
     
     // Set log file path only in Electron environment
     if (process.versions && process.versions.electron) {
-      const logDir = path.join(process.env.APPDATA || process.env.HOME || '.', 'LeadFlow', 'logs');
+      const logDir = path.join(process.env.APPDATA || process.env.HOME || '.', 'OverlayLab', 'logs');
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
       }
       
-      log.transports.file.resolvePathFn = () => path.join(logDir, 'main-process.log');
+      const logFilePath = path.join(logDir, 'log.log');
+      
+      // Clear log file on each new run (start fresh)
+      if (fs.existsSync(logFilePath)) {
+        fs.writeFileSync(logFilePath, '', 'utf8');
+      }
+      
+      log.transports.file.resolvePathFn = () => logFilePath;
     }
     
     // Log session start

@@ -1,14 +1,16 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
 
 const {spawn, exec} = require('child_process');
 const fs = require('fs');
+const http = require('http');
 
 const path = require('path');
+const { extname } = require('path');
 
 const {autoUpdater, AppUpdater} = require('electron-differential-updater');
 const log = require('electron-log');
@@ -89,9 +91,12 @@ ipcMain.handle('broadcast-redux-action', (event, actionData) => {
 
 // Variables and constants !!! ---------------------------------------------------------------------------------------------------
 
-let mainWindow, store, widgetWindow, tray;
+let mainWindow, store, widgetWindow, tray, authWindow;
+let authToken = null; // Store the authentication token
+let isRestartingAuth = false; // Flag to track if we're restarting the auth flow
 let ipAddress = process.env.SERVER_IP_ADDRESS || '';
 let widgetUndetectabilityEnabled = true; // Enable undetectability for widget by default
+let isRecorded = false; // Control whether overlay window can be recorded (will be loaded from store)
 let lastScreenshotTime = 0; // Cooldown tracking for global shortcut
 let lastValidationRequestTime = 0; // Cooldown tracking for screenshot validation requests
 let screenshotProcessActive = false; // Track if screenshot process is currently active
@@ -140,7 +145,119 @@ const isDev = process.env.NODE_ENV === 'development';
 // Variables and constants END !!! ---------------------------------------------------------------------------------------------------
 
 
+// HTTP Server for Window Loading !!! ---------------------------------------------------------------------------------------------------
 
+let server = null;
+
+// MIME type mapping
+const mimeTypes = {
+  '.html': 'text/html',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm'
+};
+
+function getMimeType(filePath) {
+  const ext = extname(filePath).toLowerCase();
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+function createServer() {
+  // If server already exists, resolve immediately
+  if (server) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const rendererPath = join(__dirname, '../renderer');
+
+    server = http.createServer((req, res) => {
+      let filePath = rendererPath;
+      // Remove query string and hash from URL for file path resolution
+      const urlPath = (req.url || '/').split('?')[0].split('#')[0];
+      const url = urlPath;
+
+      // Handle root path
+      if (url === '/' || url === '/index.html') {
+        filePath = join(rendererPath, 'index.html');
+      } else {
+        // Handle other paths (assets, etc.)
+        // Remove leading slash for path joining
+        const cleanPath = url.startsWith('/') ? url.slice(1) : url;
+        filePath = join(rendererPath, cleanPath);
+      }
+
+      // Security: prevent directory traversal
+      if (!filePath.startsWith(rendererPath)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+
+      // Check if the requested URL is an asset file (has a file extension)
+      const urlExt = extname(url).toLowerCase();
+      const isAssetFile = urlExt !== '' && urlExt !== '.html';
+
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          if (err.code === 'ENOENT') {
+            // If it's an asset file (JS, CSS, images, etc.) and doesn't exist, return 404
+            if (isAssetFile) {
+              res.writeHead(404, { 'Content-Type': 'text/plain' });
+              res.end('Not found');
+              return;
+            }
+            // For SPA routing: if it's a route (no extension or .html), serve index.html
+            // This allows React Router to handle client-side routing
+            const indexPath = join(rendererPath, 'index.html');
+            fs.readFile(indexPath, (indexErr, indexData) => {
+              if (indexErr) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not found');
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(indexData);
+            });
+          } else {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Server error');
+          }
+          return;
+        }
+
+        const mimeType = getMimeType(filePath);
+        res.writeHead(200, { 'Content-Type': mimeType });
+        res.end(data);
+      });
+    });
+
+    server.listen(19029, '127.0.0.1', () => {
+      logger.info('HTTP server running on http://127.0.0.1:19029');
+      resolve();
+    });
+
+    server.on('error', (err) => {
+      logger.error('HTTP server error:', err);
+      reject(err);
+    });
+  });
+}
+
+// HTTP Server for Window Loading END !!! ---------------------------------------------------------------------------------------------------
 
 
 // IPC On Section !!! ------------------------------------------------------------------------------------------------------
@@ -171,6 +288,7 @@ class UndetectableWidgetWindow {
 
   constructor(options = {}) {
     this.undetectabilityEnabled = options.undetectabilityEnabled || true;
+    this.isRecorded = options.isRecorded !== undefined ? options.isRecorded : false;
     this.devToolsOpen = false;
     
     // Create widget window with undetectability features
@@ -201,10 +319,10 @@ class UndetectableWidgetWindow {
       }
     });
 
-    // Set content protection if undetectability is enabled
-    if (this.undetectabilityEnabled) {
-      this.window.setContentProtection(true);
-    }
+    // Set content protection based on isRecorded
+    // If isRecorded is false, prevent recording (setContentProtection(true))
+    // If isRecorded is true, allow recording (setContentProtection(false))
+    this.window.setContentProtection(!this.isRecorded);
 
     // Additional undetectability measures
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -446,7 +564,222 @@ class UndetectableWidgetWindow {
 
 // Undetectable Widget Window Class END !!! ---------------------------------------------------------------------------------------------------
 
-function createWidgetWindow() {
+// Auth Window Creation Function !!! ---------------------------------------------------------------------------------------------------
+
+let authCompletePromise = null;
+let authCompleteResolver = null;
+
+function createAuthWindow() {
+  return new Promise((resolve, reject) => {
+    // If auth window already exists, focus it
+    if (authWindow && !authWindow.isDestroyed()) {
+      logger.info('Auth window already exists, focusing it');
+      authWindow.focus();
+      // Return existing promise if available
+      if (authCompletePromise) {
+        authCompletePromise.then(resolve).catch(reject);
+      } else {
+        resolve({ success: false, message: 'Auth window exists but no promise available' });
+      }
+      return;
+    }
+
+    // Create promise for auth completion
+    authCompletePromise = new Promise((innerResolve) => {
+      authCompleteResolver = innerResolve;
+    });
+    
+    // Chain the promise resolution
+    authCompletePromise.then(resolve).catch(reject);
+
+    logger.info('Creating auth window');
+
+    // Create auth window
+    authWindow = new BrowserWindow({
+      width: 500,
+      height: 700,
+      show: false,
+      frame: false,
+      autoHideMenuBar: true,
+      icon: icon,
+      webPreferences: {
+        preload: join(__dirname, '../preload/preload.js'),
+        sandbox: false,
+        contextIsolation: true,
+        devTools: true,
+      },
+      modal: true,
+      resizable: false,
+    });
+
+    authWindow.on('ready-to-show', () => {
+      authWindow.show();
+      authWindow.focus();
+    });
+
+    // Load auth window
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      const baseUrl = process.env['ELECTRON_RENDERER_URL'];
+      const authUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=auth-window' : baseUrl + '/?windowName=auth-window';
+      logger.debug('Loading auth window from URL', { url: authUrl });
+      authWindow.loadURL(authUrl);
+    } else {
+      // Ensure HTTP server is created, then load via HTTP
+      createServer().then(() => {
+        const authUrl = 'http://127.0.0.1:19029/?windowName=auth-window';
+        logger.debug('Loading auth window from HTTP server', { url: authUrl });
+        authWindow.loadURL(authUrl);
+      }).catch((error) => {
+        logger.error('Failed to create server for auth window', error);
+        reject(error);
+      });
+    }
+
+    // Handle window close - if closed before auth, reject
+    authWindow.on('closed', () => {
+      if (authCompleteResolver) {
+        logger.warn('Auth window closed before authentication completed');
+        authWindow = null;
+        authCompleteResolver = null;
+      }
+    });
+  });
+}
+
+// Function to restart authentication flow
+async function restartAuthFlow() {
+  logger.info('Restarting authentication flow - destroying windows and reopening auth window');
+  
+  // Set flag to prevent app from quitting
+  isRestartingAuth = true;
+  
+  // Clear stored token
+  authToken = null;
+  
+  // Clear auth resolver if it exists
+  authCompleteResolver = null;
+  authCompletePromise = null;
+  
+  // Create auth window FIRST to prevent app from quitting when other windows close
+  logger.info('Creating new auth window after sign out');
+  
+  // Start creating the auth window - the BrowserWindow object is created synchronously
+  // so it will exist immediately, preventing app quit
+  const authWindowPromise = createAuthWindow();
+  
+  // Wait a moment for the window to be created (BrowserWindow is created synchronously,
+  // but we wait a bit to ensure it's ready)
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  // Now destroy other windows - auth window already exists
+  // Destroy widget window
+  if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed()) {
+    try {
+      logger.info('Destroying widget window for auth restart');
+      widgetWindow.window.destroy();
+      widgetWindow = null;
+    } catch (error) {
+      logger.error('Error destroying widget window during auth restart', error);
+    }
+  }
+  
+  // Destroy main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      logger.info('Destroying main window for auth restart');
+      mainWindow.destroy();
+      mainWindow = null;
+    } catch (error) {
+      logger.error('Error destroying main window during auth restart', error);
+    }
+  }
+  
+  // Handle auth completion in the background
+  authWindowPromise
+    .then((authResult) => {
+      // Clear the flag after auth completes
+      isRestartingAuth = false;
+      
+      if (authResult && authResult.success) {
+        logger.info('Re-authentication successful, creating main and widget windows');
+        createMainAndWidgetWindows();
+      } else {
+        logger.error('Re-authentication failed or was cancelled');
+        isRestartingAuth = false;
+        app.quit();
+      }
+    })
+    .catch((error) => {
+      logger.error('Error in auth window promise', error);
+      isRestartingAuth = false;
+      app.quit();
+    });
+  
+  // Note: We don't await the authWindowPromise here - the window is already created
+  // and will prevent app quit. The promise resolves when auth completes.
+}
+
+// IPC handler for sign out
+ipcMain.handle('auth:signOut', async () => {
+  logger.info('Sign out requested');
+  await restartAuthFlow();
+  return { success: true };
+});
+
+// IPC handler for auth completion
+ipcMain.on('auth-complete', async (event, tokenOrData) => {
+  // Handle both direct token string and object with token property
+  let token = null;
+  
+  if (typeof tokenOrData === 'string') {
+    // Direct token string
+    token = tokenOrData;
+  } else if (tokenOrData && typeof tokenOrData === 'object') {
+    // Handle different payload structures:
+    // - { token: "..." }
+    // - { payload: { token: "..." } }
+    token = tokenOrData.token || (tokenOrData.payload && tokenOrData.payload.token);
+  }
+  
+  logger.info('Auth complete received, token:', token ? 'present' : 'missing');
+  logger.debug('Token data structure:', { 
+    type: typeof tokenOrData, 
+    isString: typeof tokenOrData === 'string',
+    hasToken: !!(tokenOrData && tokenOrData.token),
+    hasPayload: !!(tokenOrData && tokenOrData.payload)
+  });
+  
+  if (!token) {
+    logger.error('Auth complete received but no token found in payload', { tokenOrData });
+    return;
+  }
+  
+  // Store the token globally for use in API calls
+  authToken = token;
+  logger.info('Authentication token stored successfully');
+  
+  if (authCompleteResolver) {
+    // Resolve the auth promise with success
+    logger.info('Resolving auth promise and closing auth window');
+    authCompleteResolver({ token, success: true });
+    authCompleteResolver = null;
+    
+    // Close auth window after a brief delay to ensure message is processed
+    setTimeout(() => {
+      if (authWindow && !authWindow.isDestroyed()) {
+        logger.info('Closing auth window after successful authentication');
+        authWindow.close();
+        authWindow = null;
+      }
+    }, 200);
+  } else {
+    logger.warn('Auth complete received but no resolver available - auth window may have been closed');
+  }
+});
+
+// Auth Window Creation Function END !!! ---------------------------------------------------------------------------------------------------
+
+async function createWidgetWindow() {
   // Check if widget window already exists and is not destroyed
   if (widgetWindow && !widgetWindow.isDestroyed()) {
     logger.info('Widget window already exists, focusing it');
@@ -460,7 +793,8 @@ function createWidgetWindow() {
 
   // Create widget window using the undetectable window class
   widgetWindow = new UndetectableWidgetWindow({
-    undetectabilityEnabled: widgetUndetectabilityEnabled
+    undetectabilityEnabled: widgetUndetectabilityEnabled,
+    isRecorded: isRecorded
   });
 
   logger.info('Widget window created', { undetectabilityEnabled: widgetUndetectabilityEnabled });
@@ -468,16 +802,18 @@ function createWidgetWindow() {
   // Load the widget window with proper React support
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     const baseUrl = process.env['ELECTRON_RENDERER_URL'];
-    const widgetUrl = baseUrl.endsWith('/') ? baseUrl + '?widget=true' : baseUrl + '/?widget=true';
+    const widgetUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=overlay-window' : baseUrl + '/?windowName=overlay-window';
     logger.debug('Loading widget from URL', { url: widgetUrl });
     widgetWindow.window.loadURL(widgetUrl).catch((error) => {
       logger.error('Failed to load widget URL', error);
     });
   } else {
-    const widgetPath = join(__dirname, '../renderer/index.html');
-    logger.debug('Loading widget from file', { path: widgetPath });
-    widgetWindow.window.loadFile(widgetPath, { query: { widget: 'true' } }).catch((error) => {
-      logger.error('Failed to load widget file', error);
+    // Ensure HTTP server is created, then load via HTTP
+    await createServer();
+    const widgetUrl = 'http://127.0.0.1:19029/?windowName=overlay-window';
+    logger.debug('Loading widget from HTTP server', { url: widgetUrl });
+    widgetWindow.window.loadURL(widgetUrl).catch((error) => {
+      logger.error('Failed to load widget from HTTP server', error);
     });
 
     widgetWindow.window.setMenuBarVisibility(false);
@@ -522,7 +858,7 @@ function recreateWidgetWindow() {
 }
 
 // Function to create main and widget windows
-function createMainAndWidgetWindows() {
+async function createMainAndWidgetWindows() {
   logger.info('Creating main and widget windows');
   
   // Creating Main Window
@@ -543,16 +879,33 @@ function createMainAndWidgetWindows() {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
+    
+    // Check for updates only after main window is ready and shown
+    // This ensures updates are checked in the main window, not the auth window
+    // Only check for updates in production builds (packaged apps)
+    const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
+    if ((app.isPackaged || isDev) && autoUpdater) {
+      logger.info('[AutoUpdater] Main window ready, checking for updates...');
+      autoUpdater.checkForUpdates().catch((e) => {
+        logger.warn('[AutoUpdater] Failed to check for updates:', e);
+      });
+    } else {
+      logger.debug('[AutoUpdater] Skipping update check - not in production build or dev mode');
+    }
   });
 
   // Loading HTML and Configuring the Main Window
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    logger.debug('Loading main window from URL', { url: process.env['ELECTRON_RENDERER_URL'] });
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
+    const baseUrl = process.env['ELECTRON_RENDERER_URL'];
+    const mainUrl = baseUrl.endsWith('/') ? baseUrl + '?windowName=main-window' : baseUrl + '/?windowName=main-window';
+    logger.debug('Loading main window from URL', { url: mainUrl });
+    mainWindow.loadURL(mainUrl);
   } else {
-    const mainPath = join(__dirname, '../renderer/index.html');
-    logger.debug('Loading main window from file', { path: mainPath });
-    mainWindow.loadFile(mainPath);
+    // Start HTTP server and load via HTTP to ensure window.location.protocol is 'http:'
+    await createServer();
+    const mainUrl = 'http://127.0.0.1:19029/?windowName=main-window';
+    logger.debug('Loading main window from HTTP server', { url: mainUrl });
+    mainWindow.loadURL(mainUrl);
   }
 
   mainWindow.setMenuBarVisibility(false);
@@ -585,7 +938,7 @@ function createMainAndWidgetWindows() {
 
   // Register Protocol with the Windows
   if (process.platform === 'win32') {
-    const urlArg = process.argv.find(arg => arg.startsWith('agentbed://'));
+    const urlArg = process.argv.find(arg => arg.startsWith('overlaylab://'));
     if (urlArg) {
       logger.info('Protocol URL found in arguments', { url: urlArg });
       mainWindow.webContents.once('did-finish-load', () => {
@@ -938,6 +1291,68 @@ ipcMain.handle('delete-data', (event, key) => {
   storeDeleteData(key);
 });
 
+// Settings IPC Handlers
+ipcMain.handle('settings:getOverlayRecordable', (event) => {
+  return isRecorded;
+});
+
+ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
+  isRecorded = value;
+  storeStoreData('isRecorded', value);
+  logger.info('Updated isRecorded setting', { isRecorded: value });
+  return { success: true };
+});
+
+ipcMain.handle('settings:restartApp', () => {
+  logger.info('[Settings] Restart requested by user - closing all windows');
+  
+  // Schedule the restart FIRST before closing windows
+  app.relaunch();
+  
+  // Set quitting flag to allow windows to close
+  app.isQuiting = true;
+  
+  // Close widget/overlay window first
+  if (widgetWindow) {
+    try {
+      if (!widgetWindow.isDestroyed()) {
+        logger.info('[Settings] Closing widget/overlay window');
+        widgetWindow.window.destroy(); // Use destroy for immediate cleanup
+      }
+      widgetWindow = null;
+    } catch (error) {
+      logger.error('[Settings] Error closing widget window:', error);
+    }
+  }
+  
+  // Close main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      logger.info('[Settings] Closing main window');
+      mainWindow.destroy(); // Use destroy for immediate cleanup
+    } catch (error) {
+      logger.error('[Settings] Error closing main window:', error);
+    }
+  }
+  
+  // Clean up tray if it exists
+  if (tray) {
+    try {
+      logger.info('[Settings] Destroying tray');
+      tray.destroy();
+      tray = null;
+    } catch (error) {
+      logger.error('[Settings] Error destroying tray:', error);
+    }
+  }
+  
+  // Small delay to ensure windows are fully closed before quitting
+  setTimeout(() => {
+    logger.info('[Settings] All windows closed, quitting application (restart scheduled)');
+    app.quit();
+  }, 100);
+});
+
 
 ipcMain.handle('show-dialog', async (event, dialogType, dialogTitle, dialogMessage) => {
   await dialog.showMessageBox({
@@ -1011,7 +1426,20 @@ ipcMain.handle('window:quit', () => {
   // Set quitting flag to prevent window close event from hiding the window
   app.isQuiting = true;
   
-  // Clean up widget window first
+  // Clean up auth window first if it exists
+  if (authWindow) {
+    try {
+      if (!authWindow.isDestroyed()) {
+        logger.info('Destroying auth window from IPC quit');
+        authWindow.destroy();
+      }
+      authWindow = null;
+    } catch (error) {
+      logger.error('Error destroying auth window during IPC quit:', error);
+    }
+  }
+  
+  // Clean up widget window
   if (widgetWindow) {
     try {
       if (!widgetWindow.isDestroyed()) {
@@ -1056,8 +1484,15 @@ ipcMain.handle('window:quit', () => {
 });
 
 ipcMain.handle('window:minimize', () => {
-  if (mainWindow) {
+  // If auth window exists and is not destroyed, minimize it
+  if (authWindow && !authWindow.isDestroyed()) {
+    logger.debug('Minimizing auth window');
+    authWindow.minimize();
+  } else if (mainWindow && !mainWindow.isDestroyed()) {
+    logger.debug('Minimizing main window');
     mainWindow.minimize();
+  } else {
+    logger.warn('No window available to minimize');
   }
 });
 
@@ -1296,6 +1731,11 @@ ipcMain.handle('app:getVersion', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('app:getResourcePath', (event, relativePath) => {
+  const path = require('path');
+  return path.join(__dirname, '..', 'resources', relativePath).replace(/\\/g, '/');
+});
+
 // WSL Setup APIs
 ipcMain.handle('installWSL', async () => {
   try {
@@ -1440,13 +1880,26 @@ ipcMain.handle('sendToMain', async (event, eventName, payload) => {
   try {
     logger.info('Sending event to main window', { eventName, payload });
     
+    // Special handling for auth-complete - forward to auth handler
+    if (eventName === 'auth-complete') {
+      logger.info('Auth-complete event received via sendToMain, forwarding to auth handler');
+      logger.debug('Auth payload structure:', { payload, hasToken: !!(payload && payload.token) });
+      // Pass the payload object to the auth-complete handler - it will extract the token
+      // The payload structure is { token: "..." }
+      ipcMain.emit('auth-complete', event, payload);
+      return { success: true };
+    }
+    
     // Just send the event directly to main window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('eventFromWidget', { eventName, payload });
       logger.info('Event sent to main window successfully');
       return { success: true };
     } else {
-      logger.warn('Main window not available, event not sent');
+      // Only warn if it's not during auth flow (when main window shouldn't exist yet)
+      if (eventName !== 'auth-complete' && !authWindow) {
+        logger.warn('Main window not available, event not sent');
+      }
       return { success: false, error: 'Main window not available' };
     }
   } catch (error) {
@@ -2956,7 +3409,7 @@ async function handleEvent(eventInfo) {
 
 async function handleWebEventTrigger(url) {
   logger.info("Web event triggered", { url });
-  let eventInfo = url.replace(/^agentbed:\/\//i, '');
+  let eventInfo = url.replace(/^overlaylab:\/\//i, '');
 
   if (eventInfo.endsWith('/')) {
     eventInfo = eventInfo.slice(0, -1);
@@ -2965,10 +3418,10 @@ async function handleWebEventTrigger(url) {
   try {
     const decoded = decodeURIComponent(eventInfo);
     const parsed = JSON.parse(decoded);
-    logger.info('Received AgentBed event', parsed);
+    logger.info('Received OverlayLab event', parsed);
     await handleEvent(parsed);
   } catch (e) {
-    logger.error('Failed to parse AgentBed event', { eventInfo, error: e.message });
+    logger.error('Failed to parse OverlayLab event', { eventInfo, error: e.message });
   }
 
 }
@@ -2982,7 +3435,7 @@ async function handleWebEventTrigger(url) {
 // App Section !!! -------------------------------------------------------------------------------------
 
 app.on('second-instance', (event, argv) => {
-  const urlArg = argv.find(arg => arg.startsWith('agentbed://'));
+  const urlArg = argv.find(arg => arg.startsWith('overlaylab://'));
   if (urlArg) {
     logger.info('Second instance with protocol', { url: urlArg });
     if (mainWindow) {
@@ -2995,6 +3448,42 @@ app.whenReady().then(async () => {
 
   // Initialize quitting flag
   app.isQuiting = false;
+
+  // Fix CORS issues with duplicate headers by intercepting responses
+  const defaultSession = session.defaultSession;
+  
+  defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    // Fix duplicate Access-Control-Allow-Origin headers
+    if (details.responseHeaders && details.responseHeaders['access-control-allow-origin']) {
+      const origins = details.responseHeaders['access-control-allow-origin'];
+      if (Array.isArray(origins) && origins.length > 1) {
+        // Keep only the first value
+        details.responseHeaders['access-control-allow-origin'] = [origins[0]];
+        logger.debug('Fixed duplicate Access-Control-Allow-Origin header', { 
+          original: origins, 
+          fixed: origins[0] 
+        });
+      }
+    }
+    
+    // Also fix other duplicate CORS headers
+    const corsHeaders = [
+      'access-control-allow-methods',
+      'access-control-allow-headers',
+      'access-control-allow-credentials'
+    ];
+    
+    corsHeaders.forEach(header => {
+      if (details.responseHeaders && details.responseHeaders[header]) {
+        const values = details.responseHeaders[header];
+        if (Array.isArray(values) && values.length > 1) {
+          details.responseHeaders[header] = [values[0]];
+        }
+      }
+    });
+    
+    callback({ responseHeaders: details.responseHeaders });
+  });
   
 
   // Single Instance Check 
@@ -3098,16 +3587,37 @@ app.whenReady().then(async () => {
   store = await loadStore();
   logger.info('Application store loaded');
 
+  // Load isRecorded setting from store
+  const storedIsRecorded = store.get('isRecorded', false);
+  isRecorded = storedIsRecorded;
+  logger.info('Loaded isRecorded setting from store', { isRecorded });
+
   // Create main and widget windows directly (ensure windows exist before updater events)
   logger.info('Creating initial main and widget windows');
-  createMainAndWidgetWindows();
+  // Start with authentication flow
+  createAuthWindow()
+    .then((authResult) => {
+      if (authResult && authResult.success) {
+        logger.info('Authentication successful, creating main and widget windows');
+        createMainAndWidgetWindows();
+      } else {
+        logger.error('Authentication failed or was cancelled');
+        app.quit();
+      }
+    })
+    .catch((error) => {
+      logger.error('Error during authentication flow', error);
+      app.quit();
+    });
 
   // Configure auto-updater feed URL (GitHub releases)
   // Configure and run auto-updater only in production (packaged app).
   // Skip in development or when the app isn't packaged to avoid HTTP errors
   // (e.g., no macOS release present) and unhandled promise rejections.
+  // NOTE: Update checks will be triggered after main window is created, not here
+  // to ensure they only run in the main window, not the auth window
   const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DISABLE_UPDATER === '1';
-  if (!isDev || app.isPackaged) {
+  if (app.isPackaged || !isDev) {
     autoUpdater.setFeedURL({
       provider: 'github',
       owner: 'Nicky9319',
@@ -3120,22 +3630,28 @@ app.whenReady().then(async () => {
     autoUpdater.allowDowngrade = false;
     autoUpdater.allowPrerelease = false;
 
-    // Check for updates on startup (don't block window creation)
-    autoUpdater.checkForUpdates().catch((e) => {
-      logger.warn('[AutoUpdater] Failed to check for updates:', e);
-    });
+    // Don't check for updates here - wait until main window is created
+    // This ensures updates are only checked in the main window, not the auth window
+    logger.info('[AutoUpdater] Auto-updater configured. Will check for updates after main window is created.');
   } else {
-    logger.info('[AutoUpdater] Skipping auto-updater in development/unpackaged mode');
+    logger.info('[AutoUpdater] Skipping auto-updater configuration - not in production build or dev mode');
   }
 
   // Register Protocol with the Windows
   // Note: Protocol handling will be set up after main window is created
+  if (!app.isDefaultProtocolClient('overlaylab')) {
+    app.setAsDefaultProtocolClient('overlaylab');
+    logger.info('Registered overlaylab:// protocol handler');
+  } else {
+    logger.info('overlaylab:// protocol handler already registered');
+  }
 
 });
 
 app.on('will-quit' , async (event) => {
   // Don't prevent quit if we're already in quitting state
-  if (!app.isQuiting) {
+  // Also don't prevent quit if we're restarting auth (auth window will be created)
+  if (!app.isQuiting && !isRestartingAuth) {
     event.preventDefault();
     logger.info("Application quitting, cleaning up resources");
 
@@ -3176,6 +3692,19 @@ app.on('will-quit' , async (event) => {
     }
 
     // setupWindow removed; no cleanup required
+
+    // Clean up HTTP server
+    if (server) {
+      try {
+        logger.debug('Closing HTTP server');
+        server.close(() => {
+          logger.info('HTTP server closed');
+        });
+        server = null;
+      } catch (error) {
+        logger.error('Error closing HTTP server during quit', error);
+      }
+    }
 
     logger.debug('Unregistering all global shortcuts');
     try {

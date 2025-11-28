@@ -1,0 +1,5 @@
+Purpose	Color	Hex
+Primary Blue	Deep Electric Blue	#0E2FA8
+Primary Cyan	Neon Cyan	#28D7FF
+Primary Purple	Vivid Purple	#6A00D4
+Primary Magenta	Neon Magenta	#D72BFF

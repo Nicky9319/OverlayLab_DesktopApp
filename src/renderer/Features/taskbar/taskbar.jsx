@@ -1,8 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import iconImage from '../../assets/icon.png';
 
 const Taskbar = () => {
     const [showContextMenu, setShowContextMenu] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+    const [appVersion, setAppVersion] = useState('');
+
+    useEffect(() => {
+        const fetchVersion = async () => {
+            try {
+                if (window.electronAPI && window.electronAPI.getAppVersion) {
+                    const version = await window.electronAPI.getAppVersion();
+                    setAppVersion(version);
+                }
+            } catch (error) {
+                console.warn('Failed to fetch app version:', error);
+            }
+        };
+
+        fetchVersion();
+    }, []);
 
     const handleClose = () => {
         console.log('Close button clicked');
@@ -151,18 +168,37 @@ const Taskbar = () => {
                 </button>
             </div>
 
-            {/* Center - App Title */}
-            <div className="absolute left-1/2 transform -translate-x-1/2">
+            {/* Center - App Title with Logo */}
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-2">
+                <img 
+                    src={iconImage}
+                    alt="Overlay Labs" 
+                    style={{ 
+                        width: '16px', 
+                        height: '16px',
+                        objectFit: 'contain',
+                        display: 'block'
+                    }}
+                />
                 <span 
                     className="text-xs font-medium"
-                    style={{ color: '#8E8E93' }}
+                    style={{ color: '#007AFF' }}
                 >
-                    Overlay Lab
+                    Overlay Labs
                 </span>
             </div>
 
-            {/* Right side - Empty for balance */}
-            <div className="w-20"></div>
+            {/* Right side - Version Display */}
+            <div className="w-20 flex items-center justify-end">
+                {appVersion && (
+                    <span 
+                        className="text-xs font-medium"
+                        style={{ color: '#007AFF' }}
+                    >
+                        v{appVersion}
+                    </span>
+                )}
+            </div>
 
             {/* Context Menu */}
             {showContextMenu && (
