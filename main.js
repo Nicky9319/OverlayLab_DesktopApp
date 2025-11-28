@@ -1303,6 +1303,56 @@ ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
   return { success: true };
 });
 
+ipcMain.handle('settings:restartApp', () => {
+  logger.info('[Settings] Restart requested by user - closing all windows');
+  
+  // Schedule the restart FIRST before closing windows
+  app.relaunch();
+  
+  // Set quitting flag to allow windows to close
+  app.isQuiting = true;
+  
+  // Close widget/overlay window first
+  if (widgetWindow) {
+    try {
+      if (!widgetWindow.isDestroyed()) {
+        logger.info('[Settings] Closing widget/overlay window');
+        widgetWindow.window.destroy(); // Use destroy for immediate cleanup
+      }
+      widgetWindow = null;
+    } catch (error) {
+      logger.error('[Settings] Error closing widget window:', error);
+    }
+  }
+  
+  // Close main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      logger.info('[Settings] Closing main window');
+      mainWindow.destroy(); // Use destroy for immediate cleanup
+    } catch (error) {
+      logger.error('[Settings] Error closing main window:', error);
+    }
+  }
+  
+  // Clean up tray if it exists
+  if (tray) {
+    try {
+      logger.info('[Settings] Destroying tray');
+      tray.destroy();
+      tray = null;
+    } catch (error) {
+      logger.error('[Settings] Error destroying tray:', error);
+    }
+  }
+  
+  // Small delay to ensure windows are fully closed before quitting
+  setTimeout(() => {
+    logger.info('[Settings] All windows closed, quitting application (restart scheduled)');
+    app.quit();
+  }, 100);
+});
+
 
 ipcMain.handle('show-dialog', async (event, dialogType, dialogTitle, dialogMessage) => {
   await dialog.showMessageBox({

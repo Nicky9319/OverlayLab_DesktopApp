@@ -78,6 +78,7 @@ if (process.contextIsolated) {
       // Settings API
       getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
       setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
+      restartApp: () => ipcRenderer.invoke('settings:restartApp'),
     });
 
     contextBridge.exposeInMainWorld('widgetAPI', {
@@ -232,5 +233,6 @@ else{
     // Settings API
     getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
     setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
+    restartApp: () => ipcRenderer.invoke('settings:restartApp'),
   }
 }

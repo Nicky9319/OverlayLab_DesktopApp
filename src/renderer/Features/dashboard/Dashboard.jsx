@@ -61,6 +61,23 @@ const Dashboard = () => {
         }
     };
 
+    const handleSaveAndRestart = async () => {
+        try {
+            if (window.electronAPI && window.electronAPI.setOverlayRecordable) {
+                await window.electronAPI.setOverlayRecordable(isRecorded);
+                setOriginalIsRecorded(isRecorded);
+                setHasUnsavedChanges(false);
+                
+                // Restart the app
+                if (window.electronAPI.restartApp) {
+                    await window.electronAPI.restartApp();
+                }
+            }
+        } catch (error) {
+            console.error('Failed to save and restart:', error);
+        }
+    };
+
     const renderLeadflowView = () => {
         return (
             <div style={{
@@ -224,58 +241,87 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div style={{
-                    backgroundColor: '#1C1C1E',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    marginBottom: '24px'
-                }}>
-                    <p style={{
-                        fontSize: '14px',
-                        color: '#8E8E93',
-                        margin: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                    }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M12 16v-4M12 8h.01" />
-                        </svg>
-                        Changes will take effect after restarting the application.
-                    </p>
-                </div>
-
                 {hasUnsavedChanges && (
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'flex-end',
-                        marginTop: 'auto',
-                        paddingTop: '24px'
-                    }}>
-                        <button
-                            onClick={handleSave}
-                            style={{
-                                padding: '12px 24px',
-                                fontSize: '16px',
-                                fontWeight: '600',
-                                backgroundColor: '#007AFF',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '8px',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.2s',
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.backgroundColor = '#0056CC';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.backgroundColor = '#007AFF';
-                            }}
-                        >
-                            Save Changes
-                        </button>
-                    </div>
+                    <>
+                        <div style={{
+                            backgroundColor: '#1C1C1E',
+                            borderRadius: '12px',
+                            padding: '12px 16px',
+                            marginBottom: '20px'
+                        }}>
+                            <p style={{
+                                fontSize: '13px',
+                                color: '#8E8E93',
+                                margin: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 16v-4M12 8h.01" />
+                                </svg>
+                                Changes will take effect after restarting the application.
+                            </p>
+                        </div>
+
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: '10px',
+                            marginTop: 'auto',
+                            paddingTop: '20px'
+                        }}>
+                            <button
+                                onClick={handleSave}
+                                style={{
+                                    padding: '8px 16px',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    backgroundColor: 'transparent',
+                                    color: '#8E8E93',
+                                    border: '1px solid #1C1C1E',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = '#1C1C1E';
+                                    e.target.style.borderColor = '#2D2D2F';
+                                    e.target.style.color = '#FFFFFF';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = 'transparent';
+                                    e.target.style.borderColor = '#1C1C1E';
+                                    e.target.style.color = '#8E8E93';
+                                }}
+                            >
+                                Save
+                            </button>
+                            <button
+                                onClick={handleSaveAndRestart}
+                                style={{
+                                    padding: '8px 16px',
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    backgroundColor: '#007AFF',
+                                    color: '#FFFFFF',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s',
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = '#0056CC';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = '#007AFF';
+                                }}
+                            >
+                                Save & Restart
+                            </button>
+                        </div>
+                    </>
                 )}
             </div>
         );
