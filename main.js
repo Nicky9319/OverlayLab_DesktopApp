@@ -96,6 +96,7 @@ let authToken = null; // Store the authentication token
 let isRestartingAuth = false; // Flag to track if we're restarting the auth flow
 let ipAddress = process.env.SERVER_IP_ADDRESS || '';
 let widgetUndetectabilityEnabled = true; // Enable undetectability for widget by default
+let isRecorded = false; // Control whether overlay window can be recorded (will be loaded from store)
 let lastScreenshotTime = 0; // Cooldown tracking for global shortcut
 let lastValidationRequestTime = 0; // Cooldown tracking for screenshot validation requests
 let screenshotProcessActive = false; // Track if screenshot process is currently active
@@ -287,6 +288,7 @@ class UndetectableWidgetWindow {
 
   constructor(options = {}) {
     this.undetectabilityEnabled = options.undetectabilityEnabled || true;
+    this.isRecorded = options.isRecorded !== undefined ? options.isRecorded : false;
     this.devToolsOpen = false;
     
     // Create widget window with undetectability features
@@ -317,10 +319,10 @@ class UndetectableWidgetWindow {
       }
     });
 
-    // Set content protection if undetectability is enabled
-    if (this.undetectabilityEnabled) {
-      this.window.setContentProtection(true);
-    }
+    // Set content protection based on isRecorded
+    // If isRecorded is false, prevent recording (setContentProtection(true))
+    // If isRecorded is true, allow recording (setContentProtection(false))
+    this.window.setContentProtection(!this.isRecorded);
 
     // Additional undetectability measures
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -791,7 +793,8 @@ async function createWidgetWindow() {
 
   // Create widget window using the undetectable window class
   widgetWindow = new UndetectableWidgetWindow({
-    undetectabilityEnabled: widgetUndetectabilityEnabled
+    undetectabilityEnabled: widgetUndetectabilityEnabled,
+    isRecorded: isRecorded
   });
 
   logger.info('Widget window created', { undetectabilityEnabled: widgetUndetectabilityEnabled });
@@ -1286,6 +1289,18 @@ ipcMain.handle('get-data', (event, key) => {
 
 ipcMain.handle('delete-data', (event, key) => {
   storeDeleteData(key);
+});
+
+// Settings IPC Handlers
+ipcMain.handle('settings:getOverlayRecordable', (event) => {
+  return isRecorded;
+});
+
+ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
+  isRecorded = value;
+  storeStoreData('isRecorded', value);
+  logger.info('Updated isRecorded setting', { isRecorded: value });
+  return { success: true };
 });
 
 
@@ -3521,6 +3536,11 @@ app.whenReady().then(async () => {
   logger.info('Loading application store');
   store = await loadStore();
   logger.info('Application store loaded');
+
+  // Load isRecorded setting from store
+  const storedIsRecorded = store.get('isRecorded', false);
+  isRecorded = storedIsRecorded;
+  logger.info('Loaded isRecorded setting from store', { isRecorded });
 
   // Create main and widget windows directly (ensure windows exist before updater events)
   logger.info('Creating initial main and widget windows');

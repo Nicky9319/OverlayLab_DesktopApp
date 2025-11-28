@@ -74,6 +74,10 @@ if (process.contextIsolated) {
       broadcastReduxAction: (actionData) => ipcRenderer.invoke('broadcast-redux-action', actionData),
       onReduxActionBroadcast: (callback) => ipcRenderer.on('redux-action-broadcast', (event, data) => callback(data)),
       removeReduxBroadcastListener: () => ipcRenderer.removeAllListeners('redux-action-broadcast'),
+      
+      // Settings API
+      getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
+      setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
     });
 
     contextBridge.exposeInMainWorld('widgetAPI', {
