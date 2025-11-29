@@ -4,13 +4,15 @@ import { UserButton } from '@clerk/clerk-react';
 import Taskbar from '../taskbar/taskbar';
 import overlayLabIcon from '../../assets/icon.png';
 import leadflowLogo from '../../assets/leadflow_logo.png';
+import airtypeLogo from '../../assets/airtype_logo.png';
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const [currentView, setCurrentView] = useState('leadflow'); // 'leadflow' or 'settings'
+    const [currentView, setCurrentView] = useState('leadflow'); // 'leadflow', 'airtype', or 'settings'
     const [isRecorded, setIsRecorded] = useState(false);
     const [originalIsRecorded, setOriginalIsRecorded] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+    const [showComingSoon, setShowComingSoon] = useState(false);
 
     // Load settings on component mount
     useEffect(() => {
@@ -43,6 +45,18 @@ const Dashboard = () => {
 
     const handleLeadflowViewClick = () => {
         setCurrentView('leadflow');
+    };
+
+    const handleAirtypeViewClick = () => {
+        setCurrentView('airtype');
+    };
+
+    const handleAirtypeClick = () => {
+        setShowComingSoon(true);
+    };
+
+    const handleCloseComingSoon = () => {
+        setShowComingSoon(false);
     };
 
     const handleToggleChange = (e) => {
@@ -143,6 +157,76 @@ const Dashboard = () => {
                         }}
                     >
                         Open Leadflow Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    const renderAirtypeView = () => {
+        return (
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px',
+                height: '100%',
+                gap: '24px',
+                width: '100%'
+            }}>
+                <div style={{
+                    maxWidth: '600px',
+                    width: '100%',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                }}>
+                    <img 
+                        src={airtypeLogo} 
+                        alt="AirType Logo" 
+                        style={{
+                            maxWidth: '300px',
+                            width: '100%',
+                            height: 'auto',
+                            marginBottom: '32px',
+                            objectFit: 'contain',
+                            display: 'block',
+                            marginLeft: 'auto',
+                            marginRight: 'auto'
+                        }}
+                    />
+                    <p style={{
+                        fontSize: '16px',
+                        color: '#8E8E93',
+                        lineHeight: '1.6',
+                        marginBottom: '32px'
+                    }}>
+                        AirType listens to your voice, converts it to text, and types it wherever your cursor is positioned. 
+                        Perfect for hands-free typing across any application.
+                    </p>
+                    <button
+                        onClick={handleAirtypeClick}
+                        style={{
+                            padding: '16px 32px',
+                            fontSize: '18px',
+                            fontWeight: '600',
+                            backgroundColor: '#007AFF',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = '#0056CC';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = '#007AFF';
+                        }}
+                    >
+                        Start AirType
                     </button>
                 </div>
             </div>
@@ -397,6 +481,53 @@ const Dashboard = () => {
                             Leadflow
                         </span>
                     </div>
+                    <div
+                        onClick={handleAirtypeViewClick}
+                        style={{
+                            padding: '16px 20px',
+                            cursor: 'pointer',
+                            backgroundColor: currentView === 'airtype' ? '#1C1C1E' : 'transparent',
+                            borderLeft: currentView === 'airtype' ? '3px solid #007AFF' : '3px solid transparent',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}
+                        onMouseEnter={(e) => {
+                            if (currentView !== 'airtype') {
+                                e.currentTarget.style.backgroundColor = '#0A0A0A';
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (currentView !== 'airtype') {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                            }
+                        }}
+                    >
+                        {/* Small icon before text */}
+                        <img 
+                            src={airtypeLogo} 
+                            alt="AirType" 
+                            style={{
+                                width: '36px',
+                                height: '36px',
+                                objectFit: 'contain',
+                                zIndex: 1,
+                                flexShrink: 0
+                            }}
+                        />
+                        <span style={{
+                            fontSize: '16px',
+                            fontWeight: currentView === 'airtype' ? '600' : '400',
+                            color: '#FFFFFF',
+                            zIndex: 1,
+                            position: 'relative'
+                        }}>
+                            AirType
+                        </span>
+                    </div>
                 </div>
 
                 {/* Right Content Area */}
@@ -405,7 +536,9 @@ const Dashboard = () => {
                     overflow: 'auto',
                     backgroundColor: '#000000'
                 }}>
-                    {currentView === 'leadflow' ? renderLeadflowView() : renderSettingsView()}
+                    {currentView === 'leadflow' && renderLeadflowView()}
+                    {currentView === 'airtype' && renderAirtypeView()}
+                    {currentView === 'settings' && renderSettingsView()}
                 </div>
             </div>
             
@@ -497,6 +630,81 @@ const Dashboard = () => {
                     }}
                 />
             </div>
+
+            {/* Coming Soon Modal */}
+            {showComingSoon && (
+                <div
+                    onClick={handleCloseComingSoon}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 1000,
+                        backdropFilter: 'blur(4px)'
+                    }}
+                >
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            backgroundColor: '#1C1C1E',
+                            borderRadius: '16px',
+                            padding: '32px',
+                            maxWidth: '400px',
+                            width: '90%',
+                            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                            border: '1px solid #2D2D2F'
+                        }}
+                    >
+                        <h2 style={{
+                            fontSize: '24px',
+                            fontWeight: '600',
+                            color: '#FFFFFF',
+                            marginBottom: '16px',
+                            textAlign: 'center'
+                        }}>
+                            Coming Soon
+                        </h2>
+                        <p style={{
+                            fontSize: '16px',
+                            color: '#8E8E93',
+                            lineHeight: '1.6',
+                            marginBottom: '24px',
+                            textAlign: 'center'
+                        }}>
+                            AirType is currently under development. This feature will allow you to convert your voice to text and type it wherever your cursor is positioned.
+                        </p>
+                        <button
+                            onClick={handleCloseComingSoon}
+                            style={{
+                                width: '100%',
+                                padding: '12px 24px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                backgroundColor: '#007AFF',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s',
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#0056CC';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#007AFF';
+                            }}
+                        >
+                            Got it
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
