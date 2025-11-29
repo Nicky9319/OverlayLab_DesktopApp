@@ -79,6 +79,11 @@ if (process.contextIsolated) {
       getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
       setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
       restartApp: () => ipcRenderer.invoke('settings:restartApp'),
+      // Overlay selector API
+      openOverlaySelector: () => ipcRenderer.invoke('overlay:openSelector'),
+      saveOverlayType: (overlayType) => ipcRenderer.invoke('overlay:saveOverlayType', overlayType),
+      getOverlayType: () => ipcRenderer.invoke('overlay:getOverlayType'),
+      onOpenSelector: (callback) => ipcRenderer.on('overlay:openSelector', callback),
     });
 
     contextBridge.exposeInMainWorld('widgetAPI', {
@@ -115,6 +120,11 @@ if (process.contextIsolated) {
       downloadUpdate: () => ipcRenderer.invoke('update:download'),
       restartAndInstall: () => ipcRenderer.invoke('update:restart'),
       getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+      // Overlay selector API
+      openOverlaySelector: () => ipcRenderer.invoke('overlay:openSelector'),
+      saveOverlayType: (overlayType) => ipcRenderer.invoke('overlay:saveOverlayType', overlayType),
+      getOverlayType: () => ipcRenderer.invoke('overlay:getOverlayType'),
+      onOpenSelector: (callback) => ipcRenderer.on('overlay:openSelector', callback),
     });
 
   }
@@ -234,5 +244,10 @@ else{
     getOverlayRecordable: () => ipcRenderer.invoke('settings:getOverlayRecordable'),
     setOverlayRecordable: (value) => ipcRenderer.invoke('settings:setOverlayRecordable', value),
     restartApp: () => ipcRenderer.invoke('settings:restartApp'),
+    // Overlay selector API
+    openOverlaySelector: () => ipcRenderer.invoke('overlay:openSelector'),
+    saveOverlayType: (overlayType) => ipcRenderer.invoke('overlay:saveOverlayType', overlayType),
+    getOverlayType: () => ipcRenderer.invoke('overlay:getOverlayType'),
+    onOpenSelector: (callback) => ipcRenderer.on('overlay:openSelector', callback),
   }
 }

@@ -833,6 +833,16 @@ async function createWidgetWindow() {
             widgetWindow.setIgnoreMouseEvents(true, { forward: true });
             widgetWindow.window.setAlwaysOnTop(true);
             logger.debug('Widget window shown and configured for overlay mode');
+            
+            // Send saved overlay type to widget window
+            if (store) {
+              const savedOverlayType = store.get('selectedOverlayType', 'leadflow');
+              logger.info('Sending saved overlay type to widget window', { savedOverlayType });
+              widgetWindow.window.webContents.send('eventFromMain', {
+                eventName: 'overlay:setOverlayType',
+                payload: savedOverlayType
+              });
+            }
           }
         }, 500);
       } catch (error) {
@@ -1301,6 +1311,35 @@ ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
   storeStoreData('isRecorded', value);
   logger.info('Updated isRecorded setting', { isRecorded: value });
   return { success: true };
+});
+
+// Overlay selector IPC handlers
+ipcMain.handle('overlay:openSelector', (event) => {
+  logger.debug('Overlay selector open requested');
+  if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+    widgetWindow.window.webContents.send('overlay:openSelector');
+    return { success: true };
+  }
+  return { success: false, error: 'Widget window not available' };
+});
+
+ipcMain.handle('overlay:saveOverlayType', (event, overlayType) => {
+  logger.info('Saving overlay type', { overlayType });
+  if (store) {
+    store.set('selectedOverlayType', overlayType);
+    logger.info('Overlay type saved to store', { overlayType });
+    return { success: true };
+  }
+  return { success: false, error: 'Store not available' };
+});
+
+ipcMain.handle('overlay:getOverlayType', (event) => {
+  if (store) {
+    const overlayType = store.get('selectedOverlayType', 'leadflow');
+    logger.debug('Retrieved overlay type from store', { overlayType });
+    return { success: true, overlayType };
+  }
+  return { success: false, overlayType: 'leadflow' };
 });
 
 ipcMain.handle('settings:restartApp', () => {
@@ -3522,6 +3561,16 @@ app.whenReady().then(async () => {
       // If widget window doesn't exist, create it
       logger.debug('Widget window does not exist, creating new one');
       createWidgetWindow();
+    }
+  });
+
+  // Overlay selector shortcut (Ctrl + Q)
+  globalShortcut.register('CommandOrControl+Q', () => {
+    logger.debug('Overlay selector shortcut Ctrl+Q pressed');
+    if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+      // Send IPC event to overlay window to open selector
+      widgetWindow.window.webContents.send('overlay:openSelector');
+      logger.debug('Sent openSelector event to overlay window');
     }
   });
 

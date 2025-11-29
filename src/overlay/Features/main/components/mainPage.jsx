@@ -4,12 +4,17 @@ import { incrementMessageCount, clearMessageCount } from '../../../store/slices/
 import { themeColors } from '../../common/utils/colors';
 import FloatingWidget from '../../floatingWidget/FloatingWidget';
 import ActionBar from '../../actionBar/ActionBar';
+import OverlaySelector from '../../overlaySelector/OverlaySelector';
+import AirtypeOverlay from '../../airtype/AirtypeOverlay';
+import { OVERLAY_TYPES } from '../../../config/overlayTypes';
 
 const MainPage = () => {
   const dispatch = useDispatch();
   const { floatingWidgetVisible, actionBarVisible, allWidgetsVisible, messageCount } = useSelector(
     (state) => state.uiVisibility
   );
+  const currentOverlayType = useSelector((state) => state.overlayType.currentOverlayType);
+  const selectorIsOpen = useSelector((state) => state.overlaySelector.isOpen);
 
   // Local state to handle smooth transitions
   const [localVisibility, setLocalVisibility] = useState({
@@ -17,18 +22,70 @@ const MainPage = () => {
     actionBar: actionBarVisible && allWidgetsVisible
   });
 
-  // Handle click-through based on allWidgetsVisible state
+  // Handle click-through based on allWidgetsVisible state and selector state
   useEffect(() => {
-    if (window.widgetAPI) {
-      if (!allWidgetsVisible) {
-        // Enable click-through when all widgets are hidden
-        window.widgetAPI.enableClickThrough();
-      } else {
-        // Disable click-through when widgets are visible
-        window.widgetAPI.disableClickThrough();
+    if (!window.widgetAPI) return;
+    
+    // Use a small delay to ensure state is properly settled
+    const timeoutId = setTimeout(() => {
+      if (window.widgetAPI) {
+        // If selector is open, always disable click-through
+        if (selectorIsOpen) {
+          window.widgetAPI.disableClickThrough();
+        } else if (!allWidgetsVisible) {
+          // Enable click-through when all widgets are hidden and selector is closed
+          window.widgetAPI.enableClickThrough();
+        } else {
+          // Disable click-through when widgets are visible
+          window.widgetAPI.disableClickThrough();
+        }
       }
-    }
-  }, [allWidgetsVisible]);
+    }, 10);
+
+    return () => clearTimeout(timeoutId);
+  }, [allWidgetsVisible, selectorIsOpen, currentOverlayType]);
+
+  // Restore click-through state when overlay window becomes visible again
+  useEffect(() => {
+    if (!window.widgetAPI) return;
+
+    const updateClickThrough = () => {
+      // Small delay to ensure state is settled after window visibility changes
+      setTimeout(() => {
+        if (window.widgetAPI) {
+          if (selectorIsOpen) {
+            window.widgetAPI.disableClickThrough();
+          } else if (!allWidgetsVisible) {
+            window.widgetAPI.enableClickThrough();
+          } else {
+            window.widgetAPI.disableClickThrough();
+          }
+        }
+      }, 100);
+    };
+
+    const handleVisibilityChange = () => {
+      updateClickThrough();
+    };
+
+    const handleSelectorClosed = () => {
+      updateClickThrough();
+    };
+
+    // Listen for window focus/visibility changes
+    window.addEventListener('focus', handleVisibilityChange);
+    window.addEventListener('blur', handleVisibilityChange);
+    window.addEventListener('overlaySelectorClosed', handleSelectorClosed);
+    
+    // Also check when dependencies change
+    updateClickThrough();
+
+    return () => {
+      window.removeEventListener('focus', handleVisibilityChange);
+      window.removeEventListener('blur', handleVisibilityChange);
+      window.removeEventListener('overlaySelectorClosed', handleSelectorClosed);
+    };
+  }, [allWidgetsVisible, selectorIsOpen, currentOverlayType]);
 
   // useEffect to handle visibility state changes with smooth transitions
   useEffect(() => {
@@ -71,29 +128,40 @@ const MainPage = () => {
 
   return (
     <>
+      {/* Overlay Selector - Always on top when open */}
+      <OverlaySelector />
 
-      {localVisibility.floatingWidget && (
-        <div style={{
-          opacity: (floatingWidgetVisible && allWidgetsVisible) ? 1 : 0,
-          transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          transform: (floatingWidgetVisible && allWidgetsVisible) ? 'scale(1)' : 'scale(0.95)',
-          transitionProperty: 'opacity, transform',
-          pointerEvents: (floatingWidgetVisible && allWidgetsVisible) ? 'auto' : 'none'
-        }}>
-          <FloatingWidget />
-        </div>
+      {/* Conditionally render overlays based on type */}
+      {currentOverlayType === OVERLAY_TYPES.LEADFLOW && (
+        <>
+          {localVisibility.floatingWidget && (
+            <div style={{
+              opacity: (floatingWidgetVisible && allWidgetsVisible) ? 1 : 0,
+              transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: (floatingWidgetVisible && allWidgetsVisible) ? 'scale(1)' : 'scale(0.95)',
+              transitionProperty: 'opacity, transform',
+              pointerEvents: (floatingWidgetVisible && allWidgetsVisible) ? 'auto' : 'none'
+            }}>
+              <FloatingWidget />
+            </div>
+          )}
+          
+          {localVisibility.actionBar && (
+            <div style={{
+              opacity: (actionBarVisible && allWidgetsVisible) ? 1 : 0,
+              transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: (actionBarVisible && allWidgetsVisible) ? 'translateY(0)' : 'translateY(-10px)',
+              transitionProperty: 'opacity, transform',
+              pointerEvents: (actionBarVisible && allWidgetsVisible) ? 'auto' : 'none'
+            }}>
+              <ActionBar />
+            </div>
+          )}
+        </>
       )}
-      
-      {localVisibility.actionBar && (
-        <div style={{
-          opacity: (actionBarVisible && allWidgetsVisible) ? 1 : 0,
-          transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          transform: (actionBarVisible && allWidgetsVisible) ? 'translateY(0)' : 'translateY(-10px)',
-          transitionProperty: 'opacity, transform',
-          pointerEvents: (actionBarVisible && allWidgetsVisible) ? 'auto' : 'none'
-        }}>
-          <ActionBar />
-        </div>
+
+      {currentOverlayType === OVERLAY_TYPES.AIRTYPE && (
+        <AirtypeOverlay />
       )}
       
     </>
