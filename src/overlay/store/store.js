@@ -4,6 +4,8 @@ import floatingWidgetSlice from './slices/floatingWidgetSlice'
 import uiVisibilityReducer from './slices/uiVisibilitySlice'
 import chatStateReducer from './slices/chatStateSlice'
 import webSocketReducer from './slices/websocketSlice'
+import overlayTypeReducer from './slices/overlayTypeSlice'
+import overlaySelectorReducer from './slices/overlaySelectorSlice'
 // Use global slices for buckets and leads to ensure state synchronization across all windows
 import bucketsReducer from '../../store/slices/bucketsSlice'
 import leadsReducer from '../../store/slices/leadsSlice'
@@ -16,6 +18,8 @@ export const store = configureStore({
     uiVisibility: uiVisibilityReducer,
     chatState: chatStateReducer,
     webSocket: webSocketReducer,
+    overlayType: overlayTypeReducer,
+    overlaySelector: overlaySelectorReducer,
     buckets: bucketsReducer,
     leads: leadsReducer,
     // Add your other reducers here as you create them
