@@ -1323,7 +1323,13 @@ ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
 // Overlay selector IPC handlers
 ipcMain.handle('overlay:openSelector', (event) => {
   logger.debug('Overlay selector open requested');
-  if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+  if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed()) {
+    // Ensure window is visible
+    if (!widgetWindow.isVisible()) {
+      widgetWindow.show();
+    }
+    // Focus the window to make it active
+    widgetWindow.focus();
     widgetWindow.window.webContents.send('overlay:openSelector');
     return { success: true };
   }
@@ -3580,7 +3586,13 @@ app.whenReady().then(async () => {
   // Overlay selector shortcut (Ctrl + Q)
   globalShortcut.register('CommandOrControl+Q', () => {
     logger.debug('Overlay selector shortcut Ctrl+Q pressed');
-    if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed() && widgetWindow.isVisible()) {
+    if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed()) {
+      // Ensure window is visible
+      if (!widgetWindow.isVisible()) {
+        widgetWindow.show();
+      }
+      // Focus the window to make it active
+      widgetWindow.focus();
       // Send IPC event to overlay window to open selector
       widgetWindow.window.webContents.send('overlay:openSelector');
       logger.debug('Sent openSelector event to overlay window');
