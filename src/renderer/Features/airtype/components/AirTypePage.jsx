@@ -18,3 +18,4 @@ const AirTypePage = () => {
 export default AirTypePage;
 
 
+
