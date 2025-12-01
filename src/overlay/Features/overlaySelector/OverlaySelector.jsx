@@ -160,7 +160,7 @@ const OverlaySelector = () => {
 
   const numOverlays = overlayTypesConfig.length;
   const angleStep = 360 / numOverlays;
-  const radius = 80; // Reduced distance from center to logo - bring them closer
+  const radius = 100; // Increased distance from center to prevent overlap with center circle
   const centerX = 50; // Percentage
   const centerY = 50; // Percentage
 
@@ -236,7 +236,7 @@ const OverlaySelector = () => {
                 justifyContent: 'center',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                zIndex: isSelected ? 3 : 1,
+                zIndex: isSelected ? 2 : 1, // Lower than center circle (zIndex: 10)
                 padding: '16px',
                 borderRadius: '16px',
                 backgroundColor: isSelected 
@@ -293,15 +293,37 @@ const OverlaySelector = () => {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            color: themeColors.mutedText,
-            fontSize: '12px',
-            textAlign: 'center',
-            zIndex: 2,
+            zIndex: 10, // Higher than overlay options to prevent overlap
             pointerEvents: 'none',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <div>Use arrow keys to navigate</div>
-          <div style={{ marginTop: '4px' }}>Press Enter to select • Double-click to select • Esc to close</div>
+          <div
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              borderRadius: '50%',
+              width: '200px',
+              height: '200px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              padding: '20px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ color: '#ffffff', fontSize: '11px', textAlign: 'center', fontWeight: '500', lineHeight: '1.4' }}>
+              Use arrow keys to navigate
+            </div>
+            <div style={{ color: '#ffffff', fontSize: '11px', textAlign: 'center', marginTop: '6px', fontWeight: '500', lineHeight: '1.4' }}>
+              Press Enter to select • Double-click to select • Esc to close
+            </div>
+          </div>
         </div>
       </div>
     </div>
