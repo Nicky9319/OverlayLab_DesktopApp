@@ -335,6 +335,7 @@ class UndetectableWidgetWindow {
     }
 
     // Set initial mouse event ignoring - start with click-through enabled
+    console.log('setIgnoreMouseEvents toggled: true');
     this.setIgnoreMouseEvents(true, { forward: true });
 
     // Platform-specific additional hiding measures
@@ -367,6 +368,7 @@ class UndetectableWidgetWindow {
     this.window.webContents.on('devtools-opened', () => {
       if (this.window && !this.window.isDestroyed()) {
         this.devToolsOpen = true;
+        console.log('setIgnoreMouseEvents toggled: false');
         this.window.setIgnoreMouseEvents(false);
         logger.debug('DevTools opened: Widget window is now interactive');
       }
@@ -375,6 +377,7 @@ class UndetectableWidgetWindow {
     this.window.webContents.on('devtools-closed', () => {
       if (this.window && !this.window.isDestroyed()) {
         this.devToolsOpen = false;
+        console.log('setIgnoreMouseEvents toggled: true');
         this.window.setIgnoreMouseEvents(true, { forward: true });
         logger.debug('DevTools closed: Widget window is now click-through');
       }
@@ -388,6 +391,7 @@ class UndetectableWidgetWindow {
         this.window.setSkipTaskbar(true);
         this.window.hide();
         if (!this.devToolsOpen) {
+          console.log('setIgnoreMouseEvents toggled: true');
           this.window.setIgnoreMouseEvents(true, { forward: true });
         }
         this.window.setAlwaysOnTop(true, 'screen-saver');
@@ -398,6 +402,7 @@ class UndetectableWidgetWindow {
       logger.debug('Widget window shown, ensuring click-through');
       if (this.window && !this.window.isDestroyed()) {
         if (!this.devToolsOpen) {
+          console.log('setIgnoreMouseEvents toggled: true');
           this.window.setIgnoreMouseEvents(true, { forward: true });
         }
         this.window.setAlwaysOnTop(true, 'screen-saver');
@@ -464,6 +469,7 @@ class UndetectableWidgetWindow {
   }
 
   setIgnoreMouseEvents(ignore, options = {}) {
+    console.log(`setIgnoreMouseEvents toggled: ${ignore}`);
     logger.debug(`Setting ignore mouse events: ${ignore}`, { options });
     
     // When ignore is true, we want click-through (forward events to underlying apps)
@@ -830,6 +836,7 @@ async function createWidgetWindow() {
         // Set up proper overlay behavior
         setTimeout(() => {
           if (widgetWindow && !widgetWindow.isDestroyed()) {
+            console.log('setIgnoreMouseEvents toggled: true');
             widgetWindow.setIgnoreMouseEvents(true, { forward: true });
             widgetWindow.window.setAlwaysOnTop(true);
             logger.debug('Widget window shown and configured for overlay mode');
@@ -1634,9 +1641,11 @@ ipcMain.handle('widget:setIgnoreMouseEvents', async (event, ignore, options) => 
       // Handle the options parameter safely
       if (ignore) {
         // When enabling click-through, use forward: true
+        console.log('setIgnoreMouseEvents toggled: true');
         widgetWindow.setIgnoreMouseEvents(true, { forward: true });
       } else {
         // When disabling click-through, just pass false
+        console.log('setIgnoreMouseEvents toggled: false');
         widgetWindow.setIgnoreMouseEvents(false);
       }
       return true;
@@ -1689,18 +1698,21 @@ ipcMain.handle('widget:getUndetectabilityState', () => {
 // Click-through control handlers for main window
 ipcMain.handle('window:setClickThrough', (event, clickThrough) => {
   if (mainWindow) {
+    console.log(`setIgnoreMouseEvents toggled: ${clickThrough}`);
     mainWindow.setIgnoreMouseEvents(clickThrough, { forward: true });
   }
 });
 
 ipcMain.handle('window:enableInteraction', () => {
   if (mainWindow) {
+    console.log('setIgnoreMouseEvents toggled: false');
     mainWindow.setIgnoreMouseEvents(false);
   }
 });
 
 ipcMain.handle('window:disableInteraction', () => {
   if (mainWindow) {
+    console.log('setIgnoreMouseEvents toggled: true');
     mainWindow.setIgnoreMouseEvents(true, { forward: true });
   }
 });
@@ -3549,6 +3561,7 @@ app.whenReady().then(async () => {
         widgetWindow.show();
         setTimeout(() => {
           if (widgetWindow && !widgetWindow.isDestroyed()) {
+            console.log('setIgnoreMouseEvents toggled: true');
             widgetWindow.setIgnoreMouseEvents(true, { forward: true });
             widgetWindow.window.setAlwaysOnTop(false); // Reset first
             widgetWindow.window.setAlwaysOnTop(true, 'screen-saver'); // Re-apply

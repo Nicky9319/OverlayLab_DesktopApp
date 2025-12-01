@@ -64,13 +64,10 @@ const OverlaySelector = () => {
           });
         }
 
-        // Restore click-through state based on widget visibility
+        // Always enable click-through when overlay is selected
+        // HoverComponent will handle making specific areas interactive on hover
         if (window.widgetAPI) {
-          if (allWidgetsVisible) {
-            window.widgetAPI.disableClickThrough();
-          } else {
-            window.widgetAPI.enableClickThrough();
-          }
+          window.widgetAPI.enableClickThrough();
         }
       }
     };

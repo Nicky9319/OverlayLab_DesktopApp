@@ -33,12 +33,10 @@ const MainPage = () => {
         // If selector is open, always disable click-through
         if (selectorIsOpen) {
           window.widgetAPI.disableClickThrough();
-        } else if (!allWidgetsVisible) {
-          // Enable click-through when all widgets are hidden and selector is closed
-          window.widgetAPI.enableClickThrough();
         } else {
-          // Disable click-through when widgets are visible
-          window.widgetAPI.disableClickThrough();
+          // Enable click-through by default when selector is closed
+          // HoverComponent will handle making specific areas interactive on hover
+          window.widgetAPI.enableClickThrough();
         }
       }
     }, 10);
@@ -56,10 +54,10 @@ const MainPage = () => {
         if (window.widgetAPI) {
           if (selectorIsOpen) {
             window.widgetAPI.disableClickThrough();
-          } else if (!allWidgetsVisible) {
-            window.widgetAPI.enableClickThrough();
           } else {
-            window.widgetAPI.disableClickThrough();
+            // Enable click-through by default when selector is closed
+            // HoverComponent will handle making specific areas interactive on hover
+            window.widgetAPI.enableClickThrough();
           }
         }
       }, 100);
