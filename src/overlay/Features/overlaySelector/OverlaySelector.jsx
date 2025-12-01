@@ -242,7 +242,9 @@ const OverlaySelector = () => {
                 zIndex: isSelected ? 3 : 1,
                 padding: '16px',
                 borderRadius: '16px',
-                backgroundColor: themeColors.primaryBackground, // Black background
+                backgroundColor: isSelected 
+                  ? themeColors.primaryBackground 
+                  : 'rgba(0, 0, 0, 0.5)', // Grey out background for non-selected
                 border: isSelected 
                   ? `2px solid ${themeColors.primaryBlue}` 
                   : `2px solid ${themeColors.borderColor}`,
@@ -250,7 +252,6 @@ const OverlaySelector = () => {
                   ? `0 0 20px rgba(0, 122, 255, 0.5)` 
                   : 'none',
                 transform: `translate(-50%, -50%) ${isSelected ? 'scale(1.15)' : 'scale(1)'}`,
-                opacity: isSelected ? 1 : 0.5, // Grey out non-selected
                 minWidth: '120px',
                 width: '120px',
               }}
@@ -268,7 +269,7 @@ const OverlaySelector = () => {
                   height: '70px',
                   objectFit: 'contain',
                   marginBottom: '10px',
-                  filter: isSelected ? 'none' : 'grayscale(100%) brightness(0.5)', // Grey out non-selected
+                  filter: isSelected ? 'none' : 'grayscale(100%) brightness(0.5)', // Grey out non-selected logo
                   transition: 'filter 0.2s ease',
                 }}
               />
@@ -279,6 +280,7 @@ const OverlaySelector = () => {
                   fontWeight: isSelected ? '600' : '400',
                   textAlign: 'center',
                   transition: 'all 0.2s ease',
+                  opacity: 1, // Text always at full opacity
                 }}
               >
                 {overlay.name}
