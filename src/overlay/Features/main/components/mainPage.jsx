@@ -6,6 +6,7 @@ import FloatingWidget from '../../floatingWidget/FloatingWidget';
 import ActionBar from '../../actionBar/ActionBar';
 import OverlaySelector from '../../overlaySelector/OverlaySelector';
 import AirtypeOverlay from '../../airtype/AirtypeOverlay';
+import ClipVaultOverlay from '../../clipvault/ClipVaultOverlay';
 import { OVERLAY_TYPES } from '../../../config/overlayTypes';
 
 const MainPage = () => {
@@ -162,6 +163,10 @@ const MainPage = () => {
 
       {currentOverlayType === OVERLAY_TYPES.AIRTYPE && (
         <AirtypeOverlay />
+      )}
+
+      {currentOverlayType === OVERLAY_TYPES.CLIPVAULT && (
+        <ClipVaultOverlay />
       )}
       
     </>

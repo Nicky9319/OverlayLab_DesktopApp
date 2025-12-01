@@ -13,6 +13,7 @@ import { overlayTypesConfig } from '../../config/overlayTypes';
 import { themeColors } from '../common/utils/colors';
 import leadflowLogo from '../../../renderer/assets/leadflow_logo.png';
 import airtypeLogo from '../../../renderer/assets/airtype_logo.png';
+import clipvaultLogo from '../../../renderer/assets/clipvault_logo.png';
 
 const OverlaySelector = () => {
   const dispatch = useDispatch();
@@ -26,6 +27,7 @@ const OverlaySelector = () => {
   const logoMap = {
     leadflow: leadflowLogo,
     airtype: airtypeLogo,
+    clipvault: clipvaultLogo,
   };
 
   // Initialize selected index based on current overlay type when opening
@@ -249,6 +251,8 @@ const OverlaySelector = () => {
                   : 'none',
                 transform: `translate(-50%, -50%) ${isSelected ? 'scale(1.15)' : 'scale(1)'}`,
                 opacity: isSelected ? 1 : 0.5, // Grey out non-selected
+                minWidth: '120px',
+                width: '120px',
               }}
               onMouseEnter={() => {
                 if (!isSelected) {

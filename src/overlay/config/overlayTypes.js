@@ -2,6 +2,7 @@
 export const OVERLAY_TYPES = {
   LEADFLOW: 'leadflow',
   AIRTYPE: 'airtype',
+  CLIPVAULT: 'clipvault',
 };
 
 export const overlayTypesConfig = [
@@ -17,6 +18,12 @@ export const overlayTypesConfig = [
     logoPath: '/src/renderer/assets/airtype_logo.png',
     component: 'AirtypeOverlay',
   },
+  {
+    id: OVERLAY_TYPES.CLIPVAULT,
+    name: 'Clip Vault',
+    logoPath: '/src/renderer/assets/clipvault_logo.png',
+    component: 'ClipVaultOverlay',
+  },
 ];
 
 export const getOverlayTypeById = (id) => {
@@ -26,4 +33,5 @@ export const getOverlayTypeById = (id) => {
 export const getDefaultOverlayType = () => {
   return OVERLAY_TYPES.LEADFLOW;
 };
+
 

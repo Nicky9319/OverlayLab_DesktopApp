@@ -5,14 +5,16 @@ import Taskbar from '../taskbar/taskbar';
 import overlayLabIcon from '../../assets/icon.png';
 import leadflowLogo from '../../assets/leadflow_logo.png';
 import airtypeLogo from '../../assets/airtype_logo.png';
+import clipvaultLogo from '../../assets/clipvault_logo.png';
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const [currentView, setCurrentView] = useState('leadflow'); // 'leadflow', 'airtype', or 'settings'
+    const [currentView, setCurrentView] = useState('leadflow'); // 'leadflow', 'airtype', 'clipvault', or 'settings'
     const [isRecorded, setIsRecorded] = useState(false);
     const [originalIsRecorded, setOriginalIsRecorded] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showComingSoon, setShowComingSoon] = useState(false);
+    const [comingSoonFeature, setComingSoonFeature] = useState(null); // 'airtype' or 'clipvault'
 
     // Load settings on component mount
     useEffect(() => {
@@ -52,11 +54,22 @@ const Dashboard = () => {
     };
 
     const handleAirtypeClick = () => {
+        setComingSoonFeature('airtype');
+        setShowComingSoon(true);
+    };
+
+    const handleClipVaultViewClick = () => {
+        setCurrentView('clipvault');
+    };
+
+    const handleClipVaultClick = () => {
+        setComingSoonFeature('clipvault');
         setShowComingSoon(true);
     };
 
     const handleCloseComingSoon = () => {
         setShowComingSoon(false);
+        setComingSoonFeature(null);
     };
 
     const handleToggleChange = (e) => {
@@ -227,6 +240,75 @@ const Dashboard = () => {
                         }}
                     >
                         Start AirType
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    const renderClipVaultView = () => {
+        return (
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px',
+                height: '100%',
+                gap: '24px',
+                width: '100%'
+            }}>
+                <div style={{
+                    maxWidth: '600px',
+                    width: '100%',
+                    textAlign: 'center',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                }}>
+                    <img 
+                        src={clipvaultLogo} 
+                        alt="Clip Vault Logo" 
+                        style={{
+                            maxWidth: '300px',
+                            width: '100%',
+                            height: 'auto',
+                            marginBottom: '32px',
+                            objectFit: 'contain',
+                            display: 'block',
+                            marginLeft: 'auto',
+                            marginRight: 'auto'
+                        }}
+                    />
+                    <p style={{
+                        fontSize: '16px',
+                        color: '#8E8E93',
+                        lineHeight: '1.6',
+                        marginBottom: '32px'
+                    }}>
+                        Clip Vault helps you organize and store information by creating classes or buckets. Paste text or images and classify them into categories for easy retrieval, review, and relationship tracking.
+                    </p>
+                    <button
+                        onClick={handleClipVaultClick}
+                        style={{
+                            padding: '16px 32px',
+                            fontSize: '18px',
+                            fontWeight: '600',
+                            backgroundColor: '#007AFF',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'background-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = '#0056CC';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = '#007AFF';
+                        }}
+                    >
+                        Open Clip Vault
                     </button>
                 </div>
             </div>
@@ -528,6 +610,53 @@ const Dashboard = () => {
                             AirType
                         </span>
                     </div>
+                    <div
+                        onClick={handleClipVaultViewClick}
+                        style={{
+                            padding: '16px 20px',
+                            cursor: 'pointer',
+                            backgroundColor: currentView === 'clipvault' ? '#1C1C1E' : 'transparent',
+                            borderLeft: currentView === 'clipvault' ? '3px solid #007AFF' : '3px solid transparent',
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}
+                        onMouseEnter={(e) => {
+                            if (currentView !== 'clipvault') {
+                                e.currentTarget.style.backgroundColor = '#0A0A0A';
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (currentView !== 'clipvault') {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                            }
+                        }}
+                    >
+                        {/* Small icon before text */}
+                        <img 
+                            src={clipvaultLogo} 
+                            alt="Clip Vault" 
+                            style={{
+                                width: '36px',
+                                height: '36px',
+                                objectFit: 'contain',
+                                zIndex: 1,
+                                flexShrink: 0
+                            }}
+                        />
+                        <span style={{
+                            fontSize: '16px',
+                            fontWeight: currentView === 'clipvault' ? '600' : '400',
+                            color: '#FFFFFF',
+                            zIndex: 1,
+                            position: 'relative'
+                        }}>
+                            Clip Vault
+                        </span>
+                    </div>
                 </div>
 
                 {/* Right Content Area */}
@@ -538,6 +667,7 @@ const Dashboard = () => {
                 }}>
                     {currentView === 'leadflow' && renderLeadflowView()}
                     {currentView === 'airtype' && renderAirtypeView()}
+                    {currentView === 'clipvault' && renderClipVaultView()}
                     {currentView === 'settings' && renderSettingsView()}
                 </div>
             </div>
@@ -677,7 +807,10 @@ const Dashboard = () => {
                             marginBottom: '24px',
                             textAlign: 'center'
                         }}>
-                            AirType is currently under development. This feature will allow you to convert your voice to text and type it wherever your cursor is positioned.
+                            {comingSoonFeature === 'airtype' 
+                                ? 'AirType is currently under development. This feature will allow you to convert your voice to text and type it wherever your cursor is positioned.'
+                                : 'Clip Vault is currently under development. This feature will help you organize and store information by creating classes or buckets. Paste text or images and classify them into categories for easy retrieval, review, and relationship tracking.'
+                            }
                         </p>
                         <button
                             onClick={handleCloseComingSoon}
