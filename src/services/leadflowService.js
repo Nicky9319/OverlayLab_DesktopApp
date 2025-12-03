@@ -65,15 +65,30 @@ const request = async (path, options = {}) => {
     
     let content;
     try {
-      content = await resp.json();
+      const text = await resp.text();
+      // Try to parse as JSON
+      try {
+        content = JSON.parse(text);
+      } catch (parseErr) {
+        // Not valid JSON, use text
+        content = { detail: text };
+      }
     } catch (err) {
-      // Non-JSON response
-      const textContent = await resp.text();
-      logger.warn(`Non-JSON response from ${url}`, { status: resp.status, text: textContent.substring(0, 200) });
-      content = { detail: textContent };
+      // Error reading response
+      logger.warn(`Error reading response from ${url}`, { status: resp.status, error: err.message });
+      content = { detail: 'Error reading response' };
     }
 
-    logger.debug(`Response from ${url}:`, { status: resp.status, contentKeys: Object.keys(content || {}) });
+    // Log response details for debugging
+    const isArray = Array.isArray(content);
+    const isObject = content && typeof content === 'object' && !isArray;
+    logger.debug(`Response from ${url}:`, { 
+      status: resp.status, 
+      isArray,
+      isObject,
+      contentKeys: isObject ? Object.keys(content) : null,
+      contentLength: isArray ? content.length : null
+    });
     return { status_code: resp.status, content };
   } catch (error) {
     // Handle CORS and network errors
@@ -412,6 +427,92 @@ const addLead = async (imageFile, bucketId = null) => {
 };
 
 /**
+ * Add team lead by uploading an image file (screenshot)
+ * @param {File} imageFile - Image file to upload
+ * @param {string} teamId - ID of the team
+ * @param {string} bucketId - Optional bucket ID to assign the lead to
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const addTeamLeadFromImage = async (imageFile, teamId, bucketId = null) => {
+  logger.info('addTeamLeadFromImage called', { 
+    fileName: imageFile?.name, 
+    fileSize: imageFile?.size, 
+    fileType: imageFile?.type, 
+    teamId,
+    bucketId 
+  });
+
+  if (!imageFile) {
+    logger.error('addTeamLeadFromImage: No image file provided');
+    return { status_code: 400, content: { detail: 'Image file is required' } };
+  }
+
+  if (!teamId) {
+    logger.error('addTeamLeadFromImage: teamId is required');
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+
+  try {
+    if (!imageFile || imageFile.size === 0) {
+      logger.error('addTeamLeadFromImage: Image file is empty or invalid');
+      return { status_code: 400, content: { detail: 'Image file is empty or invalid' } };
+    }
+    
+    const formData = new FormData();
+    formData.append('file', imageFile);
+    formData.append('teamId', teamId);
+    
+    if (bucketId) {
+      formData.append('bucketId', bucketId);
+      logger.debug('addTeamLeadFromImage: Added bucketId to FormData', { bucketId });
+    }
+
+    const url = `${BASE_URL}/api/leadflow-service/teams/leads/add-lead`;
+    logger.debug('addTeamLeadFromImage: Making POST request', { url, fileSize: imageFile.size });
+    
+    const token = await getClerkToken();
+    
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      logger.debug('addTeamLeadFromImage: Including Authorization header in request');
+    } else {
+      logger.warn('addTeamLeadFromImage: No Clerk token available for request');
+    }
+    
+    const fetchOptions = {
+      method: 'POST',
+      headers,
+      body: formData,
+      mode: 'cors',
+      credentials: 'omit',
+    };
+
+    logger.debug('addTeamLeadFromImage: Sending request...');
+    const resp = await fetch(url, fetchOptions);
+    logger.debug('addTeamLeadFromImage: Response received', { status: resp.status, ok: resp.ok });
+    
+    let content;
+    try {
+      content = await resp.json();
+      logger.debug('addTeamLeadFromImage: JSON response parsed', content);
+    } catch (err) {
+      const textContent = await resp.text();
+      logger.warn('addTeamLeadFromImage: Non-JSON response, getting text');
+      logger.debug('addTeamLeadFromImage: Text response', { textContent });
+      content = { detail: textContent };
+    }
+
+    const result = { status_code: resp.status, content };
+    logger.info('addTeamLeadFromImage: Completed', { status: resp.status, success: resp.status === 202 });
+    return result;
+  } catch (error) {
+    logger.error('addTeamLeadFromImage: Network error', { error: error.message, stack: error.stack });
+    return { status_code: 503, content: { detail: String(error) } };
+  }
+};
+
+/**
  * Update lead status
  * @param {string} leadId - ID of the lead to update
  * @param {string} status - New status for the lead
@@ -571,6 +672,556 @@ const moveLeadToBucket = async (leadId, targetBucketId, sourceBucketId = null) =
 };
 
 // ============================================================================
+// TEAM MANAGEMENT APIs
+// ============================================================================
+
+/**
+ * Add a new team
+ * @param {string} teamName - Name of the team
+ * @param {string} application - Application name (Airtype, ClipVault, Leadflow)
+ * @returns {Promise<Object>} Response with status_code and team object
+ */
+const addTeam = async (teamName, application) => {
+  logger.info('addTeam called', { teamName, application });
+  
+  if (!teamName) {
+    return { status_code: 400, content: { detail: 'teamName is required' } };
+  }
+  
+  if (!application) {
+    return { status_code: 400, content: { detail: 'application is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/add-team', {
+    method: 'POST',
+    body: JSON.stringify({ teamName, application }),
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) return resp;
+
+  let content = resp.content || {};
+  const candidate = content.team || content.content || content.data || content;
+
+  if (Array.isArray(candidate)) content = candidate[0] || {};
+  else content = candidate || {};
+
+  const normalized = {
+    teamId: content.teamId || content.team_id || content.id,
+    teamName: content.teamName || content.team_name || content.name || teamName,
+    application: content.application || application,
+    members: content.members || [],
+    ...content
+  };
+
+  logger.info('addTeam: Completed', { status: resp.status_code, teamId: normalized.teamId });
+  return { status_code: resp.status_code, content: normalized };
+};
+
+/**
+ * Add a member to a team
+ * @param {string} teamId - ID of the team
+ * @param {string} customerEmail - Email of the customer to add
+ * @param {string} role - Role of the member (admin, user)
+ * @returns {Promise<Object>} Response with status_code and success message
+ */
+const addTeamMember = async (teamId, customerEmail, role) => {
+  logger.info('addTeamMember called', { teamId, customerEmail, role });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!customerEmail) {
+    return { status_code: 400, content: { detail: 'customerEmail is required' } };
+  }
+  
+  if (!role) {
+    return { status_code: 400, content: { detail: 'role is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/add-member', {
+    method: 'POST',
+    body: JSON.stringify({ teamId, customerEmail, role }),
+  });
+
+  logger.info('addTeamMember: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Get all teams for the authenticated customer
+ * @returns {Promise<Array>} Array of team objects
+ */
+const getAllTeams = async () => {
+  logger.info('getAllTeams called');
+  
+  const resp = await request('/api/leadflow-service/teams/get-all-teams', {
+    method: 'GET',
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) {
+    return { status_code: resp?.status_code || 500, content: resp?.content || { detail: 'Failed to fetch teams' } };
+  }
+
+  let content = resp.content || {};
+  let teams = Array.isArray(content) ? content : (Array.isArray(content.teams) ? content.teams : (Array.isArray(content.data) ? content.data : []));
+
+  const normalized = teams.map(team => ({
+    teamId: team.teamId || team.team_id || team.id,
+    teamName: team.teamName || team.team_name || team.name || '',
+    application: team.application || '',
+    members: Array.isArray(team.members) ? team.members : [],
+    ...team
+  }));
+
+  logger.info('getAllTeams: Completed', { status: resp.status_code, count: normalized.length });
+  return normalized;
+};
+
+/**
+ * Update team name
+ * @param {string} teamId - ID of the team
+ * @param {string} teamName - New name for the team
+ * @returns {Promise<Object>} Response with status_code and updated team object
+ */
+const updateTeamName = async (teamId, teamName) => {
+  logger.info('updateTeamName called', { teamId, teamName });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!teamName) {
+    return { status_code: 400, content: { detail: 'teamName is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/update-team-name', {
+    method: 'PUT',
+    body: JSON.stringify({ teamId, teamName }),
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) return resp;
+
+  let content = resp.content || {};
+  const candidate = content.team || content.content || content.data || content;
+
+  if (Array.isArray(candidate)) content = candidate[0] || {};
+  else content = candidate || {};
+
+  const normalized = {
+    teamId: content.teamId || content.team_id || content.id || teamId,
+    teamName: content.teamName || content.team_name || content.name || teamName,
+    application: content.application || '',
+    members: Array.isArray(content.members) ? content.members : [],
+    ...content
+  };
+
+  logger.info('updateTeamName: Completed', { status: resp.status_code, teamId: normalized.teamId });
+  return { status_code: resp.status_code, content: normalized };
+};
+
+// ============================================================================
+// TEAM LEAD MANAGEMENT APIs
+// ============================================================================
+
+// Helper to normalize lead object fields
+const normalizeTeamLeads = (arr) => {
+  return arr.map((lead) => {
+    if (!lead || typeof lead !== 'object') return null;
+    
+    const leadId = lead.leadId || lead.lead_id || lead.id || lead._id;
+    const url = lead.url || '';
+    const username = lead.username || lead.user_name || '';
+    const platform = lead.platform || '';
+    const status = lead.status || 'Cold Message';
+    const notes = lead.notes || '';
+    const teamId = lead.teamId || lead.team_id || '';
+    
+    return {
+      leadId: leadId ? String(leadId) : null,
+      url,
+      username,
+      platform,
+      status,
+      notes,
+      teamId: teamId ? String(teamId) : null,
+      ...lead
+    };
+  }).filter(Boolean);
+};
+
+/**
+ * Get all leads for a team
+ * @param {string} teamId - ID of the team
+ * @param {string|null} bucketId - Optional bucket ID to filter leads
+ * @returns {Promise<Array>} Array of normalized lead objects
+ */
+const getTeamLeads = async (teamId, bucketId = null) => {
+  logger.info('getTeamLeads called', { teamId, bucketId });
+  
+  if (!teamId) {
+    logger.error('getTeamLeads: teamId is required');
+    return [];
+  }
+  
+  const params = new URLSearchParams();
+  params.append('teamId', teamId);
+  if (bucketId) {
+    params.append('bucketId', bucketId);
+  }
+  
+  const path = `/api/leadflow-service/teams/leads/get-all-leads?${params.toString()}`;
+  logger.debug('getTeamLeads: Making request', { path });
+  const resp = await request(path, { method: 'GET' });
+
+  if (!resp || resp.status_code !== 200) {
+    console.error('Failed to fetch team leads or non-200 response:', resp);
+    logger.error('getTeamLeads: Failed to fetch team leads', { status: resp?.status_code, content: resp?.content });
+    return [];
+  }
+
+  const content = resp.content;
+
+  if (Array.isArray(content)) {
+    logger.debug('getTeamLeads: Response is array', { count: content.length });
+    return normalizeTeamLeads(content);
+  }
+  if (content && Array.isArray(content.leads)) {
+    logger.debug('getTeamLeads: Response has leads array', { count: content.leads.length });
+    return normalizeTeamLeads(content.leads);
+  }
+  if (content && Array.isArray(content.content)) {
+    logger.debug('getTeamLeads: Response has content array', { count: content.content.length });
+    return normalizeTeamLeads(content.content);
+  }
+  if (content && Array.isArray(content.data)) {
+    logger.debug('getTeamLeads: Response has data array', { count: content.data.length });
+    return normalizeTeamLeads(content.data);
+  }
+
+  console.warn('Unexpected team leads response shape, returning empty list:', content);
+  logger.warn('getTeamLeads: Unexpected response shape', { content });
+  return [];
+};
+
+/**
+ * Add a lead for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} url - URL of the lead
+ * @param {string} username - Username/handle
+ * @param {string} platform - Platform name
+ * @param {string} status - Lead status
+ * @param {string} bucketId - Bucket ID
+ * @param {string} notes - Optional notes
+ * @returns {Promise<Object>} Response with status_code and normalized lead object
+ */
+const addTeamLead = async (teamId, url, username, platform, status, bucketId, notes = '') => {
+  logger.info('addTeamLead called', { teamId, url, username, platform, status, bucketId, notes });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!url) {
+    return { status_code: 400, content: { detail: 'url is required' } };
+  }
+  
+  if (!bucketId) {
+    return { status_code: 400, content: { detail: 'bucketId is required' } };
+  }
+
+  const body = {
+    teamId,
+    url,
+    username: username || '',
+    platform: platform || '',
+    status: status || 'Cold Message',
+    bucketId,
+    notes: notes || ''
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/add-lead', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) return resp;
+
+  let content = resp.content || {};
+  const candidate = content.lead || content.content || content.data || content;
+
+  if (Array.isArray(candidate)) content = candidate[0] || {};
+  else content = candidate || {};
+
+  const normalized = {
+    leadId: content.leadId || content.lead_id || content.id,
+    url: content.url || url,
+    username: content.username || username || '',
+    platform: content.platform || platform || '',
+    status: content.status || status || 'Cold Message',
+    bucketId: content.bucketId || content.bucket_id || bucketId,
+    teamId: content.teamId || content.team_id || teamId,
+    notes: content.notes || notes || null,
+    createdAt: content.createdAt || new Date().toISOString(),
+    ...content
+  };
+
+  logger.info('addTeamLead: Completed', { status: resp.status_code, leadId: normalized.leadId });
+  return { status_code: resp.status_code, content: normalized };
+};
+
+/**
+ * Delete a lead for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to delete
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const deleteTeamLead = async (teamId, leadId) => {
+  logger.info('deleteTeamLead called', { teamId, leadId });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!leadId) {
+    return { status_code: 400, content: { detail: 'leadId is required' } };
+  }
+
+  const body = { teamId, leadId };
+
+  const resp = await request('/api/leadflow-service/teams/leads/delete-lead', {
+    method: 'DELETE',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('deleteTeamLead: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Update lead information for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to update
+ * @param {Object} updates - Update object with fields: status, notes, url, username, platform
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateTeamLead = async (teamId, leadId, updates) => {
+  logger.info('updateTeamLead called', { teamId, leadId, updates });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!leadId) {
+    return { status_code: 400, content: { detail: 'leadId is required' } };
+  }
+  
+  if (!updates || typeof updates !== 'object') {
+    return { status_code: 400, content: { detail: 'updates object is required' } };
+  }
+
+  const body = {
+    teamId,
+    leadId,
+    ...updates
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/update-lead', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('updateTeamLead: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Add a bucket for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} bucketName - Name of the bucket
+ * @returns {Promise<Object>} Response with status_code and normalized bucket object
+ */
+const addTeamBucket = async (teamId, bucketName) => {
+  logger.info('addTeamBucket called', { teamId, bucketName });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!bucketName) {
+    return { status_code: 400, content: { detail: 'bucketName is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/buckets/add-bucket', {
+    method: 'POST',
+    body: JSON.stringify({ teamId, bucketName }),
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) return resp;
+
+  let content = resp.content || {};
+  const candidate = content.bucket || content.content || content.data || content;
+
+  if (Array.isArray(candidate)) content = candidate[0] || {};
+  else content = candidate || {};
+
+  const normalized = {
+    bucketId: content.bucketId || content.bucket_id || content.id,
+    bucketName: content.bucketName || content.bucket_name || content.name || bucketName,
+    teamId: content.teamId || content.team_id || teamId,
+    customerId: null,
+    ...content
+  };
+
+  logger.info('addTeamBucket: Completed', { status: resp.status_code, bucketId: normalized.bucketId });
+  return { status_code: resp.status_code, content: normalized };
+};
+
+/**
+ * Get all buckets for a team
+ * @param {string} teamId - ID of the team
+ * @returns {Promise<Array>} Array of bucket objects
+ */
+const getAllTeamBuckets = async (teamId) => {
+  logger.info('getAllTeamBuckets called', { teamId });
+  
+  if (!teamId) {
+    throw new Error('teamId is required');
+  }
+
+  const resp = await request(`/api/leadflow-service/teams/buckets/get-all-buckets?teamId=${encodeURIComponent(teamId)}`, {
+    method: 'GET',
+  });
+
+  if (!resp || resp.status_code < 200 || resp.status_code >= 300) {
+    const errorMessage = resp?.content?.detail || resp?.content?.message || `Failed to fetch team buckets: ${resp?.status_code || 'Unknown error'}`;
+    logger.error('getAllTeamBuckets: Error response', { status: resp?.status_code, error: errorMessage });
+    throw new Error(errorMessage);
+  }
+
+  let content = resp.content;
+  
+  logger.info('getAllTeamBuckets: Raw response', { 
+    status_code: resp.status_code,
+    contentType: typeof content,
+    isArray: Array.isArray(content),
+    contentKeys: content && typeof content === 'object' && !Array.isArray(content) ? Object.keys(content) : null,
+    contentLength: Array.isArray(content) ? content.length : null,
+    contentSample: Array.isArray(content) && content.length > 0 ? content[0] : (typeof content === 'object' ? content : null)
+  });
+  
+  // MongoDB service returns the array directly when using JSONResponse(content=buckets)
+  // LeadFlow service forwards it, so content should be the array
+  let buckets = [];
+  if (Array.isArray(content)) {
+    // Direct array response
+    buckets = content;
+    logger.info('getAllTeamBuckets: Content is array', { count: buckets.length, sample: buckets[0] || null });
+  } else if (content && typeof content === 'object') {
+    // Check if it's wrapped in an object
+    if (Array.isArray(content.buckets)) {
+      buckets = content.buckets;
+      logger.info('getAllTeamBuckets: Content has buckets array', { count: buckets.length });
+    } else if (Array.isArray(content.data)) {
+      buckets = content.data;
+      logger.info('getAllTeamBuckets: Content has data array', { count: buckets.length });
+    } else if (Array.isArray(content.content)) {
+      buckets = content.content;
+      logger.info('getAllTeamBuckets: Content has content array', { count: buckets.length });
+    } else {
+      // If content is not an array and not wrapped, log warning
+      logger.warn('getAllTeamBuckets: Unexpected response format - not an array', { 
+        contentType: typeof content,
+        contentKeys: Object.keys(content || {}),
+        content: content
+      });
+      buckets = [];
+    }
+  } else {
+    // If content is not an array or object, return empty array
+    logger.warn('getAllTeamBuckets: Unexpected response format - not array or object', { 
+      contentType: typeof content,
+      content: content
+    });
+    buckets = [];
+  }
+
+  const normalized = buckets.map(bucket => {
+    const normalizedBucket = {
+      bucketId: bucket.bucketId || bucket.bucket_id || bucket.id,
+      bucketName: bucket.bucketName || bucket.bucket_name || bucket.name || '',
+      teamId: bucket.teamId || bucket.team_id || teamId, // Always set teamId from parameter or bucket
+      customerId: null, // Team buckets should not have customerId
+      ...bucket // Spread other properties
+    };
+    return normalizedBucket;
+  });
+
+  logger.info('getAllTeamBuckets: Completed', { 
+    status: resp.status_code, 
+    count: normalized.length,
+    sampleBucket: normalized[0] || null
+  });
+  return normalized;
+};
+
+/**
+ * Update bucket name for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} bucketId - ID of the bucket
+ * @param {string} bucketName - New name for the bucket
+ * @returns {Promise<Object>} Response with status_code and updated bucket object
+ */
+const updateTeamBucketName = async (teamId, bucketId, bucketName) => {
+  logger.info('updateTeamBucketName called', { teamId, bucketId, bucketName });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!bucketId) {
+    return { status_code: 400, content: { detail: 'bucketId is required' } };
+  }
+  
+  if (!bucketName) {
+    return { status_code: 400, content: { detail: 'bucketName is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/buckets/update-bucket-name', {
+    method: 'PUT',
+    body: JSON.stringify({ teamId, bucketId, bucketName }),
+  });
+
+  logger.info('updateTeamBucketName: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Delete a bucket for a team
+ * @param {string} teamId - ID of the team
+ * @param {string} bucketId - ID of the bucket to delete
+ * @returns {Promise<Object>} Response with status_code
+ */
+const deleteTeamBucket = async (teamId, bucketId) => {
+  logger.info('deleteTeamBucket called', { teamId, bucketId });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+  
+  if (!bucketId) {
+    return { status_code: 400, content: { detail: 'bucketId is required' } };
+  }
+
+  const resp = await request(`/api/leadflow-service/teams/buckets/delete-bucket?teamId=${encodeURIComponent(teamId)}&bucketId=${encodeURIComponent(bucketId)}`, {
+    method: 'DELETE',
+  });
+
+  logger.info('deleteTeamBucket: Completed', { status: resp.status_code });
+  return resp;
+};
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -590,5 +1241,32 @@ export {
   addLead, 
   deleteLead, 
   moveLeadToBucket 
+};
+
+// Team Management exports
+export {
+  addTeam,
+  addTeamMember,
+  getAllTeams,
+  updateTeamName
+};
+
+// Team Lead Management exports
+export {
+  getTeamLeads,
+  addTeamLead,
+  addTeamLeadFromImage,
+  deleteTeamLead,
+  updateTeamLead
+};
+
+
+
+// Team Bucket Management exports
+export {
+  addTeamBucket,
+  getAllTeamBuckets,
+  updateTeamBucketName,
+  deleteTeamBucket
 };
 

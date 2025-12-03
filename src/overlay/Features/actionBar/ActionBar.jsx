@@ -6,12 +6,14 @@ import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { createLead } from '../../../store/thunks/leadsThunks';
 import { setBuckets } from '../../../store/slices/bucketsSlice';
+import { addTeamLeadFromImage } from '../../../services/leadflowService';
 
 const ActionBar = () => {
   const dispatch = useDispatch();
   const chatInterfaceVisible = useSelector((state) => state.uiVisibility.chatInterfaceVisible);
   const floatingWidgetPosition = useSelector((state) => state.floatingWidget.position);
-  const buckets = useSelector((state) => state.buckets.buckets);
+  const buckets = useSelector((state) => state.buckets?.buckets || []);
+  const { viewMode, selectedTeamId } = useSelector((state) => state.teams || { viewMode: 'customer', selectedTeamId: null });
   
   const [selectedOption, setSelectedOption] = useState('Select Option');
   const [selectedBucketId, setSelectedBucketId] = useState(null);
@@ -223,29 +225,48 @@ const ActionBar = () => {
       
       console.log('📤 Calling addLead API with file size:', imageFile.size, 'bytes');
       
-      // Call the createLead thunk which handles API call and Redux update
-      const result = await dispatch(createLead({ imageFile, bucketId }));
-      
-      console.log('📥 AddLead API Response received:');
-      console.log('- Full Response:', result);
-      
-      // Check if thunk was fulfilled
-      if (createLead.fulfilled.match(result)) {
-        console.log('🎉 Lead processing initiated successfully!');
-        console.log('✅ Response Details:', result.payload);
+      // Check if we're in team mode
+      if (viewMode === 'team' && selectedTeamId) {
+        // Use team-specific lead creation
+        console.log('👥 Team mode detected, using team lead creation', { teamId: selectedTeamId, bucketId });
+        const result = await addTeamLeadFromImage(imageFile, selectedTeamId, bucketId);
         
-        const successMessage = result.payload?.message || result.payload?.detail || 'Lead created successfully!';
-        console.log('📢 Success message:', successMessage);
+        console.log('📥 AddTeamLead API Response received:', result);
         
-        // Show success animation on floating widget
-        showLeadProcessingFeedback('success', result.payload);
+        if (result && result.status_code === 202) {
+          console.log('🎉 Team lead processing initiated successfully!');
+          const successMessage = result.content?.message || 'Team lead created successfully!';
+          showLeadProcessingFeedback('success', result.content);
+        } else {
+          console.error('❌ Failed to create team lead:', result);
+          const errorMessage = result?.content?.detail || 'Failed to create team lead';
+          showLeadProcessingFeedback('error', { message: errorMessage });
+        }
       } else {
-        console.error('❌ Failed to create lead:', result.error);
+        // Use customer lead creation (existing flow)
+        const result = await dispatch(createLead({ imageFile, bucketId }));
         
-        const errorMessage = result.error || 'Failed to create lead';
-        console.log('📢 Error message:', errorMessage);
-        // Show error animation on floating widget
-        showLeadProcessingFeedback('error', { message: errorMessage });
+        console.log('📥 AddLead API Response received:');
+        console.log('- Full Response:', result);
+        
+        // Check if thunk was fulfilled
+        if (createLead.fulfilled.match(result)) {
+          console.log('🎉 Lead processing initiated successfully!');
+          console.log('✅ Response Details:', result.payload);
+          
+          const successMessage = result.payload?.message || result.payload?.detail || 'Lead created successfully!';
+          console.log('📢 Success message:', successMessage);
+          
+          // Show success animation on floating widget
+          showLeadProcessingFeedback('success', result.payload);
+        } else {
+          console.error('❌ Failed to create lead:', result.error);
+          
+          const errorMessage = result.error || 'Failed to create lead';
+          console.log('📢 Error message:', errorMessage);
+          // Show error animation on floating widget
+          showLeadProcessingFeedback('error', { message: errorMessage });
+        }
       }
       
     } catch (error) {

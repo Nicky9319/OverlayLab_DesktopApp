@@ -3,6 +3,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
 import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
+import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
+import { fetchTeamLeads } from '../../../store/thunks/teamLeadsThunks';
 import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 
 const Leads = () => {
@@ -10,51 +12,114 @@ const Leads = () => {
   
   // Get data from Redux state
   const { leads, loading, selectedBucketId } = useSelector((state) => state.leads);
-  const { buckets, loading: bucketsLoading } = useSelector((state) => state.buckets);
+  const { buckets, loading: bucketsLoading, error: bucketsError } = useSelector((state) => state.buckets);
+  const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
+  
+  // Filter buckets based on view mode
+  let filteredBuckets = Array.isArray(buckets) ? buckets : [];
+  if (viewMode === 'team' && selectedTeamId) {
+    filteredBuckets = filteredBuckets.filter(bucket => 
+      (bucket.teamId || bucket.team_id) === selectedTeamId && !bucket.customerId
+    );
+  } else if (viewMode === 'customer') {
+    filteredBuckets = filteredBuckets.filter(bucket => 
+      !bucket.teamId && !bucket.team_id
+    );
+  }
+  
+  // Filter leads by selected bucket and view mode
+  let filteredLeads = Array.isArray(leads) ? leads : [];
+  if (viewMode === 'team' && selectedTeamId) {
+    // In team mode, only show team leads
+    filteredLeads = filteredLeads.filter(lead => 
+      (lead.teamId || lead.team_id) === selectedTeamId && !lead.customerId
+    );
+    if (selectedBucketId) {
+      filteredLeads = filteredLeads.filter(lead => 
+        lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId
+      );
+    }
+  } else if (viewMode === 'customer') {
+    // In customer mode, only show personal leads
+    filteredLeads = filteredLeads.filter(lead => 
+      !lead.teamId && !lead.team_id
+    );
+    if (selectedBucketId) {
+      filteredLeads = filteredLeads.filter(lead => 
+        lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId
+      );
+    }
+  }
 
-  // Filter leads by selected bucket (if a bucket is selected)
-  const filteredLeads = selectedBucketId 
-    ? leads.filter(lead => lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId)
-    : leads;
-
-  // Fetch buckets and leads on component mount
+  // Fetch buckets and leads based on view mode
   useEffect(() => {
     const loadData = async () => {
-      // Fetch buckets first
-      const bucketsResult = await dispatch(fetchBuckets());
-      
-      // Get buckets from the result or from Redux state
-      let bucketsData = [];
-      if (fetchBuckets.fulfilled.match(bucketsResult)) {
-        bucketsData = bucketsResult.payload;
+      if (viewMode === 'team') {
+        // Team mode: fetch team buckets and leads
+        if (selectedTeamId) {
+          const bucketsResult = await dispatch(fetchTeamBuckets(selectedTeamId));
+          
+          let bucketsData = [];
+          if (fetchTeamBuckets.fulfilled.match(bucketsResult)) {
+            bucketsData = bucketsResult.payload || [];
+          } else {
+            // On error, use empty array instead of falling back to personal buckets
+            bucketsData = [];
+          }
+          
+          // Set first bucket as default if available
+          if (bucketsData.length > 0) {
+            const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
+            dispatch(setSelectedBucketId(firstBucketId));
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: firstBucketId }));
+          } else {
+            // If no buckets, load all team leads
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: null }));
+          }
+        }
       } else {
-        // Fallback: get from current state
-        bucketsData = buckets;
-      }
-      
-      // Set first bucket as default if available
-      if (bucketsData.length > 0) {
-        const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
-        dispatch(setSelectedBucketId(firstBucketId));
-        await dispatch(fetchLeads(firstBucketId));
-      } else {
-        // If no buckets, load all leads
-        await dispatch(fetchLeads(null));
+        // Customer mode: fetch customer buckets and leads
+        const bucketsResult = await dispatch(fetchBuckets());
+        
+        let bucketsData = [];
+        if (fetchBuckets.fulfilled.match(bucketsResult)) {
+          bucketsData = bucketsResult.payload;
+        } else {
+          bucketsData = buckets;
+        }
+        
+        // Set first bucket as default if available
+        if (bucketsData.length > 0) {
+          const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
+          dispatch(setSelectedBucketId(firstBucketId));
+          await dispatch(fetchLeads(firstBucketId));
+        } else {
+          // If no buckets, load all leads
+          await dispatch(fetchLeads(null));
+        }
       }
     };
 
     loadData();
-  }, [dispatch]); // Only run on mount
+  }, [dispatch, viewMode, selectedTeamId]); // Reload when mode or team changes
 
   // Handle bucket selection
   const handleBucketChange = (bucketId) => {
     dispatch(setSelectedBucketId(bucketId));
-    dispatch(fetchLeads(bucketId || null));
+    if (viewMode === 'team' && selectedTeamId) {
+      dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: bucketId || null }));
+    } else {
+      dispatch(fetchLeads(bucketId || null));
+    }
   };
 
   // Handle refetch all leads
   const handleRefetchLeads = () => {
-    dispatch(fetchLeads(selectedBucketId));
+    if (viewMode === 'team' && selectedTeamId) {
+      dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: selectedBucketId }));
+    } else {
+      dispatch(fetchLeads(selectedBucketId));
+    }
   };
 
   // Function to update lead notes
@@ -157,9 +222,10 @@ const Leads = () => {
                 value={selectedBucketId || ''}
                 onChange={(e) => handleBucketChange(e.target.value || null)}
                 className="px-3 py-2 bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                disabled={bucketsError && viewMode === 'team'}
               >
                 <option value="">All Leads</option>
-                {buckets.map((bucket) => (
+                {filteredBuckets.map((bucket) => (
                   <option key={bucket.bucketId || bucket.id} value={bucket.bucketId || bucket.id}>
                     {bucket.bucketName || bucket.name}
                   </option>
@@ -188,9 +254,36 @@ const Leads = () => {
             </button>
           </div>
           
+          {/* Error display */}
+          {bucketsError && viewMode === 'team' && selectedTeamId && (
+            <div className="mb-4 p-4 bg-red-900/20 border border-red-500/50 rounded-lg">
+              <p className="text-sm text-red-400 mb-2">Error loading team buckets: {bucketsError}</p>
+              <button
+                onClick={() => dispatch(fetchTeamBuckets(selectedTeamId))}
+                className="text-sm text-red-300 hover:text-red-200 underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          
           {/* Lead count display */}
           <div className="text-sm text-[#8E8E93] mb-4">
-            Showing {filteredLeads.length} leads {selectedBucketId ? `from bucket: ${buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
+            {viewMode === 'team' && selectedTeamId && bucketsError ? (
+              <span className="text-red-400">Unable to load buckets. Please retry.</span>
+            ) : (
+              <>
+                Showing {filteredLeads.length} leads{' '}
+                {viewMode === 'team' && selectedTeamId ? (
+                  <>
+                    for team: {teams.find(t => (t.teamId || t.id) === selectedTeamId)?.teamName || 'Unknown'}{' '}
+                    {selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
+                  </>
+                ) : (
+                  selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'
+                )}
+              </>
+            )}
           </div>
         </div>
         
@@ -200,7 +293,7 @@ const Leads = () => {
           updateLeadStatus={handleUpdateLeadStatus} 
           deleteLead={handleDeleteLead}
           moveLeadToBucket={handleMoveLeadToBucket}
-          buckets={buckets}
+          buckets={filteredBuckets}
           currentBucketId={selectedBucketId}
         />
       </div>

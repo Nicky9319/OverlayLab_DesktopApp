@@ -1,12 +1,16 @@
 import { configureStore } from '@reduxjs/toolkit';
 import bucketsReducer from './slices/bucketsSlice';
 import leadsReducer from './slices/leadsSlice';
+import teamsReducer from './slices/teamsSlice';
+import vaultsReducer from './slices/vaultsSlice';
 import ipcSyncMiddleware from './middleware/ipcSyncMiddleware';
 
 export const store = configureStore({
   reducer: {
     buckets: bucketsReducer,
     leads: leadsReducer,
+    teams: teamsReducer,
+    vaults: vaultsReducer,
     // Add other reducers as needed
   },
   middleware: (getDefaultMiddleware) =>

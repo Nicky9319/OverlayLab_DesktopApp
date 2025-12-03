@@ -22,10 +22,30 @@ const bucketsSlice = createSlice({
       reducer: (state, action) => {
         // Always update local state (broadcast flag is only for middleware to decide whether to broadcast)
         // Ensure we always set an array, even if data is undefined/null
-        state.buckets = Array.isArray(action.payload.data) ? action.payload.data : [];
+        const bucketsData = Array.isArray(action.payload.data) ? action.payload.data : [];
+        
+        console.log('bucketsSlice.setBuckets: Updating state', {
+          receivedCount: Array.isArray(action.payload.data) ? action.payload.data.length : 0,
+          isArray: Array.isArray(action.payload.data),
+          sampleBucket: Array.isArray(action.payload.data) && action.payload.data.length > 0 ? action.payload.data[0] : null,
+          currentCount: state.buckets.length,
+          broadcast: action.payload.broadcast
+        });
+        
+        state.buckets = bucketsData;
         state.loading = false;
         state.error = null;
         state.lastFetched = Date.now();
+        
+        console.log('bucketsSlice.setBuckets: State updated', {
+          newCount: state.buckets.length,
+          buckets: state.buckets.map(b => ({
+            bucketId: b.bucketId || b.id,
+            bucketName: b.bucketName || b.name,
+            teamId: b.teamId || b.team_id,
+            customerId: b.customerId
+          }))
+        });
       },
       prepare: (data, broadcast = false) => ({
         payload: { data, broadcast }

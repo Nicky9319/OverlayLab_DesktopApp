@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserButton, useAuth } from '@clerk/clerk-react';
+import { useSelector, useDispatch } from 'react-redux';
 import { clearToken, setCustomerId } from '../../../../utils/clerkTokenProvider';
 import { authenticateCustomerId } from '../../../../services/authService';
+import { fetchAllTeams } from '../../../../store/thunks/teamsThunks';
+import { setSelectedTeamId } from '../../../../store/slices/teamsSlice';
 import LeftNavBar from '../../left-navbar/left-nav-bar';
 import Leads from '../../leads/leads';
 import Buckets from '../../buckets/buckets';
 import Taskbar from '../../taskbar/taskbar';
+import PersonalTeamToggle from '../../common/components/PersonalTeamToggle';
+import TeamSelection from '../../teams/components/TeamSelection';
 
 const MainPage = () => {
     const [activeTab, setActiveTab] = useState('buckets');
@@ -15,6 +20,8 @@ const MainPage = () => {
     const authenticationAttempts = useRef(0);
     const maxRetries = 5;
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
@@ -22,6 +29,10 @@ const MainPage = () => {
 
     const handleBackToDashboard = () => {
         navigate('/');
+    };
+
+    const handleBackToTeamSelection = () => {
+        dispatch(setSelectedTeamId(null));
     };
 
     // Expose clearToken globally for UserButton callback
@@ -125,7 +136,20 @@ const MainPage = () => {
         };
     }, [isLoaded, isSignedIn, getToken]);
 
+    // Fetch teams when switching to team mode
+    useEffect(() => {
+        if (viewMode === 'team') {
+            dispatch(fetchAllTeams());
+        }
+    }, [dispatch, viewMode]);
+
     const renderActiveComponent = () => {
+        // Show team selection page if in team mode and no team is selected
+        if (viewMode === 'team' && !selectedTeamId) {
+            return <TeamSelection />;
+        }
+
+        // Otherwise show normal content (buckets/leads)
         switch (activeTab) {
             case 'leads':
                 return <Leads />;
@@ -188,8 +212,10 @@ const MainPage = () => {
                     <div style={{ 
                         display: 'flex', 
                         alignItems: 'center',
+                        gap: '12px',
                         marginLeft: 'auto'
                     }}>
+                        <PersonalTeamToggle />
                         <UserButton 
                             appearance={{
                                 elements: {
@@ -228,6 +254,71 @@ const MainPage = () => {
                         />
                     </div>
                 </header>
+                
+                {/* Team Navigation Bar - shown only when team is selected */}
+                {viewMode === 'team' && selectedTeamId && (
+                    <div style={{
+                        padding: '16px 24px',
+                        backgroundColor: '#000000',
+                        borderBottom: '1px solid #1C1C1E',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px'
+                    }}>
+                        <button
+                            onClick={handleBackToTeamSelection}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                backgroundColor: '#1C1C1E',
+                                color: '#FFFFFF',
+                                border: '1px solid #2D2D2F',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s, border-color 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#2D2D2F';
+                                e.target.style.borderColor = '#007AFF';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#1C1C1E';
+                                e.target.style.borderColor = '#2D2D2F';
+                            }}
+                            title="Back to Teams"
+                        >
+                            <svg 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2"
+                            >
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                            Back
+                        </button>
+                        <div style={{
+                            fontSize: '16px',
+                            fontWeight: '400',
+                            color: '#8E8E93',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}>
+                            <span>Team:</span>
+                            <span style={{ color: '#FFFFFF', fontWeight: '500' }}>
+                                {teams.find(t => (t.teamId || t.id) === selectedTeamId)?.teamName || 'Team'}
+                            </span>
+                        </div>
+                    </div>
+                )}
+                
                 <div className="content-wrapper">
                     {renderActiveComponent()}
                 </div>
