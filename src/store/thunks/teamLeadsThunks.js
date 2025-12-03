@@ -4,6 +4,7 @@ import {
   setLeads, 
   setLoading, 
   setError,
+  setSelectedBucketId,
   addLead as addLeadAction,
   updateLead as updateLeadAction,
   updateLeadStatus as updateLeadStatusAction,
@@ -20,7 +21,8 @@ export const fetchTeamLeads = createAsyncThunk(
   'teamLeads/fetchTeamLeads',
   async ({ teamId, bucketId = null }, { dispatch, rejectWithValue }) => {
     try {
-      dispatch(setLoading(true));
+      dispatch(setLoading(true, teamId, true));
+      dispatch(setSelectedBucketId(bucketId, teamId, true));
       const leads = await leadflowService.getTeamLeads(teamId, bucketId);
       
       const normalizedLeads = leads.map(lead => ({
@@ -37,14 +39,15 @@ export const fetchTeamLeads = createAsyncThunk(
         ...lead
       }));
       
-      dispatch(setLeads(normalizedLeads, true));
+      // Store in team context - Broadcast to all windows (broadcast=true)
+      dispatch(setLeads(normalizedLeads, teamId, true));
       return normalizedLeads;
     } catch (error) {
       const errorMessage = error.message || 'Failed to fetch team leads';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     } finally {
-      dispatch(setLoading(false));
+      dispatch(setLoading(false, teamId, true));
     }
   }
 );
@@ -83,16 +86,17 @@ export const createTeamLead = createAsyncThunk(
           ...response.content
         };
         
-        dispatch(addLeadAction(normalizedLead, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(addLeadAction(normalizedLead, teamId, true));
         return normalizedLead;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create team lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to create team lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -115,16 +119,17 @@ export const updateTeamLead = createAsyncThunk(
           ...updates
         };
         
-        dispatch(updateLeadAction(updatedLead, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadAction(updatedLead, teamId, true));
         return { leadId, teamId, updates };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update team lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update team lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -141,16 +146,17 @@ export const removeTeamLead = createAsyncThunk(
       const response = await leadflowService.deleteTeamLead(teamId, leadId);
       
       if (response.status_code === 200) {
-        dispatch(deleteLeadAction(leadId, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(deleteLeadAction(leadId, teamId, true));
         return leadId;
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete team lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to delete team lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -167,17 +173,17 @@ export const updateTeamLeadStatus = createAsyncThunk(
       const response = await leadflowService.updateTeamLeadStatus(teamId, leadId, status);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadStatusAction({ leadId, status }, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadStatusAction({ leadId, status }, teamId, true));
         return { leadId, teamId, status };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update team lead status';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update team lead status';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -194,17 +200,17 @@ export const updateTeamLeadNotes = createAsyncThunk(
       const response = await leadflowService.updateTeamLeadNotes(teamId, leadId, notes);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadNotesAction({ leadId, notes }, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadNotesAction({ leadId, notes }, teamId, true));
         return { leadId, teamId, notes };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update team lead notes';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update team lead notes';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -221,17 +227,17 @@ export const moveTeamLeadToBucket = createAsyncThunk(
       const response = await leadflowService.moveTeamLeadToBucket(teamId, leadId, targetBucketId);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(moveLeadToBucketAction({ leadId, targetBucketId }, true));
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(moveLeadToBucketAction({ leadId, targetBucketId }, teamId, true));
         return { leadId, teamId, targetBucketId };
       } else {
         const errorMessage = response.content?.detail || 'Failed to move team lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, teamId, true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to move team lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
   }
