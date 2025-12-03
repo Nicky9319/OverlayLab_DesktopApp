@@ -1036,6 +1036,93 @@ const updateTeamLead = async (teamId, leadId, updates) => {
 };
 
 /**
+ * Update team lead status
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to update
+ * @param {string} status - New status for the lead
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateTeamLeadStatus = async (teamId, leadId, status) => {
+  logger.info('updateTeamLeadStatus called', { teamId, leadId, status });
+  
+  if (!teamId || !leadId || !status) {
+    return { status_code: 400, content: { detail: 'teamId, leadId, and status are required' } };
+  }
+
+  const body = {
+    teamId,
+    leadId,
+    status
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/update-lead-status', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('updateTeamLeadStatus: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Update team lead notes
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to update
+ * @param {string} notes - New notes for the lead
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateTeamLeadNotes = async (teamId, leadId, notes) => {
+  logger.info('updateTeamLeadNotes called', { teamId, leadId, notes });
+  
+  if (!teamId || !leadId) {
+    return { status_code: 400, content: { detail: 'teamId and leadId are required' } };
+  }
+
+  const body = {
+    teamId,
+    leadId,
+    notes: notes || ''
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/update-lead-notes', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('updateTeamLeadNotes: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Move team lead to different bucket
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to move
+ * @param {string} newBucketId - ID of the target bucket
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const moveTeamLeadToBucket = async (teamId, leadId, newBucketId) => {
+  logger.info('moveTeamLeadToBucket called', { teamId, leadId, newBucketId });
+  
+  if (!teamId || !leadId || !newBucketId) {
+    return { status_code: 400, content: { detail: 'teamId, leadId, and newBucketId are required' } };
+  }
+
+  const body = {
+    teamId,
+    leadId,
+    newBucketId
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/change-lead-bucket', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('moveTeamLeadToBucket: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
  * Add a bucket for a team
  * @param {string} teamId - ID of the team
  * @param {string} bucketName - Name of the bucket
@@ -1186,7 +1273,7 @@ const updateTeamBucketName = async (teamId, bucketId, bucketName) => {
   if (!bucketName) {
     return { status_code: 400, content: { detail: 'bucketName is required' } };
   }
-
+j
   const resp = await request('/api/leadflow-service/teams/buckets/update-bucket-name', {
     method: 'PUT',
     body: JSON.stringify({ teamId, bucketId, bucketName }),
@@ -1257,7 +1344,10 @@ export {
   addTeamLead,
   addTeamLeadFromImage,
   deleteTeamLead,
-  updateTeamLead
+  updateTeamLead,
+  updateTeamLeadStatus,
+  updateTeamLeadNotes,
+  moveTeamLeadToBucket
 };
 
 

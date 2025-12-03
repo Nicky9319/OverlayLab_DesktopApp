@@ -4,7 +4,7 @@ import LeadsContainer from './components/LeadsContainer';
 import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
-import { fetchTeamLeads } from '../../../store/thunks/teamLeadsThunks';
+import { fetchTeamLeads, updateTeamLeadStatus, updateTeamLeadNotes, removeTeamLead, moveTeamLeadToBucket } from '../../../store/thunks/teamLeadsThunks';
 import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 
 const Leads = () => {
@@ -125,11 +125,20 @@ const Leads = () => {
   // Function to update lead notes
   const handleUpdateLeadNotes = async (leadId, newNotes) => {
     try {
-      const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
-      if (updateLeadNotes.fulfilled.match(result)) {
-        console.log('Notes updated successfully for lead:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newNotes }));
+        if (updateTeamLeadNotes.fulfilled.match(result)) {
+          console.log('Notes updated successfully for team lead:', leadId);
+        } else {
+          console.error('Failed to update team lead notes:', result.error);
+        }
       } else {
-        console.error('Failed to update notes:', result.error);
+        const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
+        if (updateLeadNotes.fulfilled.match(result)) {
+          console.log('Notes updated successfully for lead:', leadId);
+        } else {
+          console.error('Failed to update notes:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error updating lead notes:', error);
@@ -139,11 +148,20 @@ const Leads = () => {
   // Function to update lead status
   const handleUpdateLeadStatus = async (leadId, newStatus) => {
     try {
-      const result = await dispatch(updateLeadStatus({ leadId, status: newStatus }));
-      if (updateLeadStatus.fulfilled.match(result)) {
-        console.log('Status updated successfully for lead:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(updateTeamLeadStatus({ teamId: selectedTeamId, leadId, status: newStatus }));
+        if (updateTeamLeadStatus.fulfilled.match(result)) {
+          console.log('Status updated successfully for team lead:', leadId);
+        } else {
+          console.error('Failed to update team lead status:', result.error);
+        }
       } else {
-        console.error('Failed to update status:', result.error);
+        const result = await dispatch(updateLeadStatus({ leadId, status: newStatus }));
+        if (updateLeadStatus.fulfilled.match(result)) {
+          console.log('Status updated successfully for lead:', leadId);
+        } else {
+          console.error('Failed to update status:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error updating lead status:', error);
@@ -153,11 +171,20 @@ const Leads = () => {
   // Function to delete lead
   const handleDeleteLead = async (leadId) => {
     try {
-      const result = await dispatch(removeLead({ leadId, bucketId: selectedBucketId }));
-      if (removeLead.fulfilled.match(result)) {
-        console.log('Lead deleted successfully:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(removeTeamLead({ teamId: selectedTeamId, leadId }));
+        if (removeTeamLead.fulfilled.match(result)) {
+          console.log('Team lead deleted successfully:', leadId);
+        } else {
+          console.error('Failed to delete team lead:', result.error);
+        }
       } else {
-        console.error('Failed to delete lead:', result.error);
+        const result = await dispatch(removeLead({ leadId, bucketId: selectedBucketId }));
+        if (removeLead.fulfilled.match(result)) {
+          console.log('Lead deleted successfully:', leadId);
+        } else {
+          console.error('Failed to delete lead:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error deleting lead:', error);
@@ -168,17 +195,32 @@ const Leads = () => {
   const handleMoveLeadToBucket = async (leadId, targetBucketId, sourceBucketId) => {
     try {
       console.log('Moving lead:', { leadId, targetBucketId, sourceBucketId });
-      const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
-      
-      if (moveLeadToBucket.fulfilled.match(result)) {
-        // If we're currently viewing the target bucket, refresh to show the moved lead
-        if (selectedBucketId === targetBucketId) {
-          await dispatch(fetchLeads(targetBucketId));
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(moveTeamLeadToBucket({ teamId: selectedTeamId, leadId, targetBucketId }));
+        
+        if (moveTeamLeadToBucket.fulfilled.match(result)) {
+          // If we're currently viewing the target bucket, refresh to show the moved lead
+          if (selectedBucketId === targetBucketId) {
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: targetBucketId }));
+          }
+          console.log('Team lead moved successfully to bucket:', targetBucketId);
+        } else {
+          console.error('Failed to move team lead:', result.error);
+          throw new Error(result.error || 'Failed to move team lead');
         }
-        console.log('Lead moved successfully to bucket:', targetBucketId);
       } else {
-        console.error('Failed to move lead:', result.error);
-        throw new Error(result.error || 'Failed to move lead');
+        const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
+        
+        if (moveLeadToBucket.fulfilled.match(result)) {
+          // If we're currently viewing the target bucket, refresh to show the moved lead
+          if (selectedBucketId === targetBucketId) {
+            await dispatch(fetchLeads(targetBucketId));
+          }
+          console.log('Lead moved successfully to bucket:', targetBucketId);
+        } else {
+          console.error('Failed to move lead:', result.error);
+          throw new Error(result.error || 'Failed to move lead');
+        }
       }
     } catch (error) {
       console.error('Error moving lead:', error);
