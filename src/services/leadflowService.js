@@ -820,6 +820,86 @@ const updateTeamName = async (teamId, teamName) => {
   return { status_code: resp.status_code, content: normalized };
 };
 
+/**
+ * Get all members of a team
+ * @param {string} teamId - ID of the team
+ * @returns {Promise<Object>} Response with status_code and content (array of members)
+ */
+const getTeamMembers = async (teamId) => {
+  logger.info('getTeamMembers called', { teamId });
+  
+  if (!teamId) {
+    return { status_code: 400, content: { detail: 'teamId is required' } };
+  }
+
+  const resp = await request(`/api/leadflow-service/teams/get-team-members?teamId=${encodeURIComponent(teamId)}`, {
+    method: 'GET',
+  });
+
+  // Normalize response
+  let normalized = [];
+  if (resp.status_code === 200 && resp.content) {
+    if (Array.isArray(resp.content)) {
+      normalized = resp.content.map(member => ({
+        customerId: member.customerId || member.customer_id || member.customerIds,
+        email: member.email || '',
+        role: member.role || 'user'
+      }));
+    } else if (resp.content.members && Array.isArray(resp.content.members)) {
+      normalized = resp.content.members.map(member => ({
+        customerId: member.customerId || member.customer_id || member.customerIds,
+        email: member.email || '',
+        role: member.role || 'user'
+      }));
+    }
+  }
+
+  logger.info('getTeamMembers: Completed', { status: resp.status_code, count: normalized.length });
+  return { status_code: resp.status_code, content: normalized };
+};
+
+/**
+ * Update a team member's role
+ * @param {string} teamId - ID of the team
+ * @param {string} memberCustomerId - Customer ID of the member to update
+ * @param {string} newRole - New role (admin or user)
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateTeamMemberRole = async (teamId, memberCustomerId, newRole) => {
+  logger.info('updateTeamMemberRole called', { teamId, memberCustomerId, newRole });
+  
+  if (!teamId || !memberCustomerId || !newRole) {
+    return { status_code: 400, content: { detail: 'teamId, memberCustomerId, and newRole are required' } };
+  }
+
+  if (newRole !== 'admin' && newRole !== 'user') {
+    return { status_code: 400, content: { detail: 'newRole must be either "admin" or "user"' } };
+  }
+
+  const resp = await request('/api/leadflow-service/teams/update-member-role', {
+    method: 'PUT',
+    body: JSON.stringify({
+      teamId,
+      customerId: memberCustomerId,
+      newRole
+    }),
+  });
+
+  // Normalize response
+  let normalized = null;
+  if (resp.status_code === 200 && resp.content) {
+    normalized = {
+      teamId: resp.content.teamId || resp.content.team_id || teamId,
+      customerId: resp.content.customerId || resp.content.customer_id || memberCustomerId,
+      newRole: resp.content.newRole || resp.content.new_role || newRole,
+      message: resp.content.message || 'Member role updated successfully'
+    };
+  }
+
+  logger.info('updateTeamMemberRole: Completed', { status: resp.status_code, teamId: normalized?.teamId });
+  return { status_code: resp.status_code, content: normalized || resp.content };
+};
+
 // ============================================================================
 // TEAM LEAD MANAGEMENT APIs
 // ============================================================================
@@ -1335,7 +1415,9 @@ export {
   addTeam,
   addTeamMember,
   getAllTeams,
-  updateTeamName
+  updateTeamName,
+  getTeamMembers,
+  updateTeamMemberRole
 };
 
 // Team Lead Management exports

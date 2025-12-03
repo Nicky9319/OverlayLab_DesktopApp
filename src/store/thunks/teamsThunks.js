@@ -6,7 +6,9 @@ import {
   setTeams,
   addTeam as addTeamAction,
   updateTeam as updateTeamAction,
-  addTeamMember as addTeamMemberAction
+  addTeamMember as addTeamMemberAction,
+  setTeamMembers,
+  updateMemberRole as updateMemberRoleAction
 } from '../slices/teamsSlice';
 
 /**
@@ -138,6 +140,67 @@ export const updateTeamName = createAsyncThunk(
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update team name';
+      dispatch(setError(errorMessage));
+      return rejectWithValue(errorMessage);
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }
+);
+
+/**
+ * Fetch all members of a team via API and update Redux state
+ * @param {string} teamId - ID of the team
+ */
+export const fetchTeamMembers = createAsyncThunk(
+  'teams/fetchTeamMembers',
+  async (teamId, { dispatch, rejectWithValue }) => {
+    try {
+      dispatch(setLoading(true));
+      const response = await leadflowService.getTeamMembers(teamId);
+      
+      if (response.status_code >= 200 && response.status_code < 300) {
+        const members = Array.isArray(response.content) ? response.content : [];
+        dispatch(setTeamMembers({ teamId, members }, true));
+        return { teamId, members };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to fetch team members';
+        dispatch(setError(errorMessage));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to fetch team members';
+      dispatch(setError(errorMessage));
+      return rejectWithValue(errorMessage);
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }
+);
+
+/**
+ * Update a team member's role via API and update Redux state
+ * @param {Object} params - { teamId: string, memberCustomerId: string, newRole: string }
+ */
+export const updateMemberRole = createAsyncThunk(
+  'teams/updateMemberRole',
+  async ({ teamId, memberCustomerId, newRole }, { dispatch, rejectWithValue }) => {
+    try {
+      dispatch(setLoading(true));
+      const response = await leadflowService.updateTeamMemberRole(teamId, memberCustomerId, newRole);
+      
+      if (response.status_code >= 200 && response.status_code < 300) {
+        dispatch(updateMemberRoleAction({ teamId, customerId: memberCustomerId, newRole }, true));
+        // Refresh team members to get updated data
+        dispatch(fetchTeamMembers(teamId));
+        return { teamId, memberCustomerId, newRole };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to update member role';
+        dispatch(setError(errorMessage));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to update member role';
       dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     } finally {

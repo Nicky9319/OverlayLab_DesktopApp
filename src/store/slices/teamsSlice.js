@@ -17,6 +17,7 @@ const teamsSlice = createSlice({
     lastFetched: null,
     selectedTeamId: null,
     viewMode: 'customer', // 'customer' or 'team'
+    teamMembers: {}, // Object keyed by teamId, each value is array of { customerId, email, role }
   },
   reducers: {
     // Set all teams (used after fetching from API)
@@ -206,6 +207,49 @@ const teamsSlice = createSlice({
         payload: { data, broadcast }
       })
     },
+    
+    // Set team members for a specific team
+    setTeamMembers: {
+      reducer: (state, action) => {
+        const { teamId, members } = action.payload.data;
+        if (teamId) {
+          state.teamMembers[teamId] = Array.isArray(members) ? members : [];
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
+    },
+    
+    // Update a team member's role
+    updateMemberRole: {
+      reducer: (state, action) => {
+        const { teamId, customerId, newRole } = action.payload.data;
+        if (teamId && state.teamMembers[teamId]) {
+          const member = state.teamMembers[teamId].find(m => 
+            m.customerId === customerId || m.customerIds === customerId
+          );
+          if (member) {
+            member.role = newRole;
+          }
+        }
+        // Also update in teams array if it exists
+        const team = state.teams.find(t => 
+          t.teamId === teamId || t.id === teamId
+        );
+        if (team && Array.isArray(team.members)) {
+          const member = team.members.find(m => 
+            m.customerIds === customerId || m.customerId === customerId
+          );
+          if (member) {
+            member.role = newRole;
+          }
+        }
+      },
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
+      })
+    },
   },
 });
 
@@ -219,7 +263,9 @@ export const {
   updateTeam,
   deleteTeam,
   addTeamMember,
-  clearTeams
+  clearTeams,
+  setTeamMembers,
+  updateMemberRole
 } = teamsSlice.actions;
 
 export default teamsSlice.reducer;

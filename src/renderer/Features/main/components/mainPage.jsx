@@ -14,6 +14,7 @@ import PersonalTeamToggle from '../../common/components/PersonalTeamToggle';
 import TeamSelection from '../../teams/components/TeamSelection';
 import EditTeamNameModal from '../../teams/components/EditTeamNameModal';
 import AddTeamMemberModal from '../../teams/components/AddTeamMemberModal';
+import TeamMembers from '../../teams/components/TeamMembers';
 
 const MainPage = () => {
     const [activeTab, setActiveTab] = useState('buckets');
@@ -166,10 +167,12 @@ const MainPage = () => {
             return <TeamSelection />;
         }
 
-        // Otherwise show normal content (buckets/leads)
+        // Otherwise show normal content (buckets/leads/team)
         switch (activeTab) {
             case 'leads':
                 return <Leads />;
+            case 'team':
+                return <TeamMembers />;
             case 'buckets':
             default:
                 return <Buckets />;
@@ -179,7 +182,12 @@ const MainPage = () => {
     return (
         <div className="main-container">
             <Taskbar />
-            <LeftNavBar activeTab={activeTab} onTabChange={handleTabChange} />
+            <LeftNavBar 
+                activeTab={activeTab} 
+                onTabChange={handleTabChange}
+                viewMode={viewMode}
+                selectedTeamId={selectedTeamId}
+            />
             <div className="content-area">
                 <header className="page-header">
                     <div style={{ 

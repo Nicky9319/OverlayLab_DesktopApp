@@ -1,10 +1,25 @@
 import React from 'react';
 
-const LeftNavBar = ({ activeTab, onTabChange }) => {
-    const tabs = [
+const LeftNavBar = ({ activeTab, onTabChange, viewMode, selectedTeamId }) => {
+    // Base tabs
+    const allTabs = [
         { id: 'buckets', label: 'Buckets', icon: '🗂️' },
-        { id: 'leads', label: 'Leads', icon: '👥' }
+        { id: 'leads', label: 'Leads', icon: '👥' },
+        { id: 'team', label: 'Team', icon: '👥' }
     ];
+
+    // Filter tabs based on view mode and team selection
+    let tabs = [];
+    if (viewMode === 'team' && selectedTeamId) {
+        // In team mode with selected team: show all tabs including Team
+        tabs = allTabs;
+    } else if (viewMode === 'team' && !selectedTeamId) {
+        // In team mode but no team selected: show no tabs (team selection page)
+        tabs = [];
+    } else {
+        // In customer mode: show only buckets and leads
+        tabs = allTabs.filter(tab => tab.id !== 'team');
+    }
 
     return (
         <div className="left-nav-container">
