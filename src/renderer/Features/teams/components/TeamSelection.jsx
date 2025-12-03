@@ -3,11 +3,15 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchAllTeams } from '../../../../store/thunks/teamsThunks';
 import { setSelectedTeamId } from '../../../../store/slices/teamsSlice';
 import CreateTeamModal from './CreateTeamModal';
+import EditTeamNameModal from './EditTeamNameModal';
+import AddTeamMemberModal from './AddTeamMemberModal';
 
 const TeamSelection = () => {
   const dispatch = useDispatch();
   const { teams, loading, error } = useSelector((state) => state.teams);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState(null);
+  const [addingMemberToTeam, setAddingMemberToTeam] = useState(null);
 
   useEffect(() => {
     dispatch(fetchAllTeams());
@@ -20,6 +24,26 @@ const TeamSelection = () => {
   const handleTeamCreated = () => {
     // Refresh teams list after creating a new team
     dispatch(fetchAllTeams());
+  };
+
+  const handleTeamUpdated = () => {
+    // Refresh teams list after updating team name
+    dispatch(fetchAllTeams());
+  };
+
+  const handleMemberAdded = () => {
+    // Refresh teams list after adding a member
+    dispatch(fetchAllTeams());
+  };
+
+  const handleEditTeam = (e, team) => {
+    e.stopPropagation(); // Prevent team selection when clicking edit
+    setEditingTeam(team);
+  };
+
+  const handleAddMember = (e, team) => {
+    e.stopPropagation(); // Prevent team selection when clicking add member
+    setAddingMemberToTeam(team);
   };
 
   if (loading) {
@@ -100,9 +124,31 @@ const TeamSelection = () => {
             <div
               key={team.teamId || team.id}
               onClick={() => handleTeamSelect(team.teamId || team.id)}
-              className="bg-[#1C1C1E] border border-[#3A3A3C] rounded-xl p-6 cursor-pointer transition-all duration-200 hover:border-[#007AFF] hover:bg-[#2C2C2E] hover:shadow-lg"
+              className="bg-[#1C1C1E] border border-[#3A3A3C] rounded-xl p-6 cursor-pointer transition-all duration-200 hover:border-[#007AFF] hover:bg-[#2C2C2E] hover:shadow-lg relative"
             >
-              <div className="mb-3">
+              {/* Action buttons */}
+              <div className="absolute top-4 right-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={(e) => handleEditTeam(e, team)}
+                  className="p-2 bg-[#2C2C2E] hover:bg-[#3A3A3C] rounded-lg transition-colors"
+                  title="Edit team name"
+                >
+                  <svg className="w-4 h-4 text-[#8E8E93] hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => handleAddMember(e, team)}
+                  className="p-2 bg-[#2C2C2E] hover:bg-[#3A3A3C] rounded-lg transition-colors"
+                  title="Add team member"
+                >
+                  <svg className="w-4 h-4 text-[#8E8E93] hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-3 pr-16">
                 <h3 className="text-xl font-semibold text-white mb-1">
                   {team.teamName || team.name || 'Unnamed Team'}
                 </h3>
@@ -131,6 +177,20 @@ const TeamSelection = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onTeamCreated={handleTeamCreated}
+      />
+
+      <EditTeamNameModal
+        isOpen={!!editingTeam}
+        onClose={() => setEditingTeam(null)}
+        team={editingTeam}
+        onTeamUpdated={handleTeamUpdated}
+      />
+
+      <AddTeamMemberModal
+        isOpen={!!addingMemberToTeam}
+        onClose={() => setAddingMemberToTeam(null)}
+        team={addingMemberToTeam}
+        onMemberAdded={handleMemberAdded}
       />
     </div>
   );
