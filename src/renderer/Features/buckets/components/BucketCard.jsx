@@ -2,17 +2,21 @@ import React, { useState } from 'react';
 
 const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [editName, setEditName] = useState(bucket.name);
+    // Get bucket ID - support both bucketId and id fields
+    const bucketId = bucket.bucketId || bucket.id || bucket.bucket_id;
+    // Get bucket name - support both bucketName and name fields
+    const bucketName = bucket.bucketName || bucket.name || bucket.bucket_name || '';
+    const [editName, setEditName] = useState(bucketName);
 
     const handleSave = () => {
-        if (editName.trim() !== bucket.name && editName.trim() !== '') {
-            onUpdateBucket(bucket.id, editName.trim());
+        if (editName.trim() !== bucketName && editName.trim() !== '') {
+            onUpdateBucket(bucketId, editName.trim());
         }
         setIsEditing(false);
     };
 
     const handleCancel = () => {
-        setEditName(bucket.name);
+        setEditName(bucketName);
         setIsEditing(false);
     };
 
@@ -30,7 +34,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
                 <div className="flex flex-col gap-2.5">
                     <div className="flex flex-col gap-1 pb-2 border-b border-[#1C1C1E]">
                         <span className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wide">ID:</span>
-                        <span className="text-xs text-[#8E8E93] font-mono break-all leading-relaxed py-1 px-2 bg-[#1C1C1E] rounded select-all">{bucket.id}</span>
+                        <span className="text-xs text-[#8E8E93] font-mono break-all leading-relaxed py-1 px-2 bg-[#1C1C1E] rounded select-all">{bucketId || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         {isEditing ? (
@@ -62,7 +66,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
                             </>
                         ) : (
                             <>
-                                <span className="flex-1 text-base font-semibold text-white">{bucket.name}</span>
+                                <span className="flex-1 text-base font-semibold text-white">{bucketName}</span>
                                 <div className="flex gap-1 items-center">
                                     <button 
                                         className="bg-transparent text-[#8E8E93] text-sm cursor-pointer transition-all duration-300 hover:text-[#007AFF] hover:scale-110"
@@ -73,7 +77,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
                                     </button>
                                     <button 
                                         className="bg-transparent text-[#8E8E93] text-sm cursor-pointer transition-all duration-300 hover:text-[#FF3B30] hover:scale-110"
-                                        onClick={() => onDeleteBucket(bucket.id)}
+                                        onClick={() => onDeleteBucket(bucketId)}
                                         title="Delete bucket"
                                     >
                                         🗑
@@ -93,7 +97,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
             <div className="flex flex-col gap-3 h-full">
                 <div className="flex flex-col gap-1 pb-2 border-b border-[#1C1C1E]">
                     <span className="text-xs font-semibold text-[#8E8E93] uppercase tracking-wide">ID:</span>
-                    <span className="text-xs text-[#8E8E93] font-mono break-all leading-relaxed py-1 px-2 bg-[#1C1C1E] rounded select-all">{bucket.id}</span>
+                    <span className="text-xs text-[#8E8E93] font-mono break-all leading-relaxed py-1 px-2 bg-[#1C1C1E] rounded select-all">{bucketId || 'N/A'}</span>
                 </div>
                 
                 <div className="flex items-center gap-2 flex-1">
@@ -126,7 +130,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
                         </>
                     ) : (
                         <>
-                            <h3 className="text-base font-semibold text-white flex-1 leading-tight">{bucket.name}</h3>
+                            <h3 className="text-base font-semibold text-white flex-1 leading-tight">{bucketName}</h3>
                             <div className="flex gap-1 items-center">
                                 <button 
                                     className="bg-transparent text-[#8E8E93] text-sm cursor-pointer transition-all duration-300 hover:text-[#007AFF] hover:scale-110"
@@ -137,7 +141,7 @@ const BucketCard = ({ bucket, onUpdateBucket, onDeleteBucket, viewMode = 'grid' 
                                 </button>
                                 <button 
                                     className="bg-transparent text-[#8E8E93] text-sm cursor-pointer transition-all duration-300 hover:text-[#FF3B30] hover:scale-110"
-                                    onClick={() => onDeleteBucket(bucket.id)}
+                                    onClick={() => onDeleteBucket(bucketId)}
                                     title="Delete bucket"
                                 >
                                     🗑

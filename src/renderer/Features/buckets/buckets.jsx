@@ -88,23 +88,37 @@ const Buckets = () => {
 
     // Function to handle bucket name update
     const handleUpdateBucket = async (bucketId, newName) => {
+        if (!bucketId) {
+            console.error('Bucket ID is required for update');
+            return;
+        }
+        
         try {
             let result;
             if (teamViewMode === 'team' && selectedTeamId) {
+                // Use team bucket update API
                 result = await dispatch(updateTeamBucketName({ teamId: selectedTeamId, bucketId, bucketName: newName }));
             } else {
+                // Use customer bucket update API
                 result = await dispatch(updateBucketName({ bucketId, bucketName: newName }));
             }
             
             if ((teamViewMode === 'team' ? updateTeamBucketName.fulfilled : updateBucketName.fulfilled).match(result)) {
-                console.log('Bucket updated successfully');
+                console.log('Bucket updated successfully', { bucketId, newName, teamViewMode, selectedTeamId });
+                // Refresh buckets after update
+                if (teamViewMode === 'team' && selectedTeamId) {
+                    await dispatch(fetchTeamBuckets(selectedTeamId));
+                } else {
+                    await dispatch(fetchBuckets());
+                }
                 // Notify widget of updated buckets
                 try {
-                    const updated = bucketsArray.map(b => 
-                        (b.bucketId === bucketId || b.id === bucketId) 
+                    const updated = bucketsArray.map(b => {
+                        const bId = b.bucketId || b.id;
+                        return (bId === bucketId) 
                             ? { ...b, bucketName: newName, name: newName } 
-                            : b
-                    );
+                            : b;
+                    });
                     console.log('Main: Sending bucket update to widget:', updated);
                     if (window && window.electronAPI && window.electronAPI.sendToWidget) {
                         await window.electronAPI.sendToWidget('buckets-updated', updated);
@@ -153,21 +167,40 @@ const Buckets = () => {
 
     // Function to handle bucket deletion
     const handleDeleteBucket = async (bucketId) => {
+        if (!bucketId) {
+            console.error('Bucket ID is required for deletion');
+            return;
+        }
+        
+        // Confirm deletion
+        if (!window.confirm(`Are you sure you want to delete this bucket? This action cannot be undone.`)) {
+            return;
+        }
+        
         try {
             let result;
             if (teamViewMode === 'team' && selectedTeamId) {
+                // Use team bucket delete API
                 result = await dispatch(removeTeamBucket({ teamId: selectedTeamId, bucketId }));
             } else {
+                // Use customer bucket delete API
                 result = await dispatch(removeBucket(bucketId));
             }
             
             if ((teamViewMode === 'team' ? removeTeamBucket.fulfilled : removeBucket.fulfilled).match(result)) {
-                console.log('Bucket deleted successfully');
+                console.log('Bucket deleted successfully', { bucketId, teamViewMode, selectedTeamId });
+                // Refresh buckets after deletion
+                if (teamViewMode === 'team' && selectedTeamId) {
+                    await dispatch(fetchTeamBuckets(selectedTeamId));
+                } else {
+                    await dispatch(fetchBuckets());
+                }
                 // Notify widget of updated buckets
                 try {
-                    const updated = bucketsArray.filter(b => 
-                        b.bucketId !== bucketId && b.id !== bucketId
-                    );
+                    const updated = bucketsArray.filter(b => {
+                        const bId = b.bucketId || b.id;
+                        return bId !== bucketId;
+                    });
                     console.log('Main: Sending bucket delete to widget:', updated);
                     if (window && window.electronAPI && window.electronAPI.sendToWidget) {
                         await window.electronAPI.sendToWidget('buckets-updated', updated);
@@ -177,9 +210,11 @@ const Buckets = () => {
                 }
             } else {
                 console.error('Failed to delete bucket:', result.error);
+                alert(`Failed to delete bucket: ${result.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Error deleting bucket:', error);
+            alert(`Error deleting bucket: ${error.message || 'Unknown error'}`);
         }
     };
 

@@ -1353,7 +1353,7 @@ const updateTeamBucketName = async (teamId, bucketId, bucketName) => {
   if (!bucketName) {
     return { status_code: 400, content: { detail: 'bucketName is required' } };
   }
-j
+
   const resp = await request('/api/leadflow-service/teams/buckets/update-bucket-name', {
     method: 'PUT',
     body: JSON.stringify({ teamId, bucketId, bucketName }),
