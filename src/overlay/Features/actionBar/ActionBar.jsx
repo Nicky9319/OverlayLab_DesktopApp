@@ -6,7 +6,11 @@ import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { createLead } from '../../../store/thunks/leadsThunks';
 import { setBuckets } from '../../../store/slices/bucketsSlice';
-import { addTeamLeadFromImage } from '../../../services/leadflowService';
+import { addTeamLeadFromImage, getAllTeams, getAllTeamBuckets } from '../../../services/leadflowService';
+import { fetchAllTeams } from '../../../store/thunks/teamsThunks';
+import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
+import { setViewMode, setSelectedTeamId } from '../../../store/slices/teamsSlice';
+import { getClerkToken } from '../../../utils/clerkTokenProvider';
 
 const ActionBar = () => {
   const dispatch = useDispatch();
@@ -14,6 +18,7 @@ const ActionBar = () => {
   const floatingWidgetPosition = useSelector((state) => state.floatingWidget.position);
   const buckets = useSelector((state) => state.buckets?.buckets || []);
   const { viewMode, selectedTeamId } = useSelector((state) => state.teams || { viewMode: 'customer', selectedTeamId: null });
+  const reduxTeams = useSelector((state) => state.teams?.teams || []);
   
   const [selectedOption, setSelectedOption] = useState('Select Option');
   const [selectedBucketId, setSelectedBucketId] = useState(null);
@@ -26,6 +31,13 @@ const ActionBar = () => {
   const [bucketNames, setBucketNames] = useState([]);
   const [bucketIds, setBucketIds] = useState([]);
   
+  // Local state for teams and view mode
+  const [localViewMode, setLocalViewMode] = useState('customer'); // 'customer' or 'team'
+  const [localSelectedTeamId, setLocalSelectedTeamId] = useState(null);
+  const [localTeams, setLocalTeams] = useState([]);
+  const [currentTeamIndex, setCurrentTeamIndex] = useState(0);
+  const [selectedTeamName, setSelectedTeamName] = useState('Select Team');
+  
   // Refs to store current bucket state for event handlers (to avoid closure issues)
   const localBucketsRef = useRef([]);
   const bucketNamesRef = useRef([]);
@@ -34,15 +46,27 @@ const ActionBar = () => {
   const selectedBucketIdRef = useRef(null);
   const currentBucketIndexRef = useRef(0);
   
+  // Refs for team state
+  const localTeamsRef = useRef([]);
+  const selectedTeamIdRef = useRef(null);
+  const currentTeamIndexRef = useRef(0);
+  const selectedTeamNameRef = useRef('Select Team');
+  
+  // Ref for dynamic width calculation
+  const barContentRef = useRef(null);
+  const [dynamicBarWidth, setDynamicBarWidth] = useState(160);
+  
+  // Ref to track if we've attempted to load buckets on mount
+  const hasLoadedBucketsRef = useRef(false);
+  
   const position = floatingWidgetPosition || { x: 1200, y: 20 };
-  const isNearRightEdge = position.x > window.innerWidth - 250;
-  const barWidth = 160;
+  const isNearRightEdge = position.x > window.innerWidth - (dynamicBarWidth + 50);
   const safeLeft = isNearRightEdge ?
-    Math.max(10, position.x - barWidth - 20) :
-    Math.min(window.innerWidth - barWidth - 10, position.x + 60);
+    Math.max(10, position.x - dynamicBarWidth - 20) :
+    Math.min(window.innerWidth - dynamicBarWidth - 10, position.x + 60);
 
   // Debug logging
-  console.log('ActionBar current buckets (Redux):', buckets, 'localBuckets:', localBuckets, 'currentBucketIndex:', currentBucketIndex);
+  console.log('ActionBar current buckets (Redux):', buckets, 'localBuckets:', localBuckets, 'currentBucketIndex:', currentBucketIndex, 'hasLoaded:', hasLoadedBucketsRef.current);
 
   // Event handler function (moved outside useEffect for testability)
   const onBucketsUpdated = (event, data) => {
@@ -225,11 +249,12 @@ const ActionBar = () => {
       
       console.log('📤 Calling addLead API with file size:', imageFile.size, 'bytes');
       
-      // Check if we're in team mode
-      if (viewMode === 'team' && selectedTeamId) {
+      // Check if we're in team mode (use local state for reliability)
+      const currentTeamId = localSelectedTeamId || selectedTeamIdRef.current || selectedTeamId;
+      if (localViewMode === 'team' && currentTeamId) {
         // Use team-specific lead creation
-        console.log('👥 Team mode detected, using team lead creation', { teamId: selectedTeamId, bucketId });
-        const result = await addTeamLeadFromImage(imageFile, selectedTeamId, bucketId);
+        console.log('👥 Team mode detected, using team lead creation', { teamId: currentTeamId, bucketId });
+        const result = await addTeamLeadFromImage(imageFile, currentTeamId, bucketId);
         
         console.log('📥 AddTeamLead API Response received:', result);
         
@@ -576,19 +601,174 @@ const ActionBar = () => {
     onBucketsUpdated(mockEvent, mockData);
   };
 
-  useEffect(() => {
-    const loadBuckets = async () => {
-      try {
-        const result = await dispatch(fetchBuckets());
-        if (fetchBuckets.fulfilled.match(result)) {
-          console.log('ActionBar loaded buckets:', result.payload);
-        }
-      } catch (error) {
-        console.error('Error loading buckets in ActionBar:', error);
-      }
-    };
-    loadBuckets();
+  // Load personal buckets function (defined early for use in mount effect)
+  const loadPersonalBuckets = async (force = false) => {
+    // Skip if we've already loaded and have buckets, and not forcing
+    if (hasLoadedBucketsRef.current && !force && (buckets.length > 0 || localBuckets.length > 0)) {
+      console.log('ActionBar: Buckets already loaded and available, skipping...');
+      return;
+    }
     
+    // Prevent duplicate simultaneous calls
+    if (hasLoadedBucketsRef.current && !force) {
+      console.log('ActionBar: Load already in progress, skipping duplicate call...');
+      return;
+    }
+    
+    try {
+      console.log('ActionBar: Loading personal buckets...', { 
+        force, 
+        hasLoaded: hasLoadedBucketsRef.current,
+        bucketsCount: buckets.length,
+        localBucketsCount: localBuckets.length
+      });
+      hasLoadedBucketsRef.current = true;
+      const result = await dispatch(fetchBuckets());
+      if (fetchBuckets.fulfilled.match(result)) {
+        console.log('ActionBar: Personal buckets loaded successfully:', result.payload);
+        // Keep flag as true since we successfully loaded
+      } else {
+        console.warn('ActionBar: Failed to load personal buckets:', result);
+        // Reset flag on failure so we can retry after a delay
+        setTimeout(() => {
+          hasLoadedBucketsRef.current = false;
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('ActionBar: Error loading personal buckets:', error);
+      // Reset flag on error so we can retry after a delay
+      setTimeout(() => {
+        hasLoadedBucketsRef.current = false;
+      }, 2000);
+    }
+  };
+
+  // Initialize view mode from Redux and load initial data on mount
+  useEffect(() => {
+    console.log('ActionBar: Component mounted, initializing...');
+    
+    // Initialize from Redux state if available
+    if (viewMode) {
+      setLocalViewMode(viewMode);
+    } else {
+      // Default to customer mode
+      setLocalViewMode('customer');
+    }
+    
+    if (selectedTeamId) {
+      setLocalSelectedTeamId(selectedTeamId);
+    }
+    
+    // Always load personal buckets on mount (default view)
+    // This ensures buckets are available immediately when the app loads
+    // Try immediate load first, then retry with delay if needed
+    console.log('ActionBar: Mount effect running, attempting immediate load...');
+    loadPersonalBuckets();
+    
+    // Also set a delayed retry in case the immediate call doesn't work
+    const loadTimer = setTimeout(() => {
+      // Only retry if we still don't have buckets
+      if (buckets.length === 0 && localBuckets.length === 0) {
+        console.log('ActionBar: Mount retry timer fired, loading buckets...');
+        loadPersonalBuckets(true); // Force retry
+      }
+    }, 500);
+    
+    return () => {
+      clearTimeout(loadTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only on mount
+
+  // Also load buckets when component becomes visible (in case it was conditionally rendered)
+  // This handles the case where the component mounts but buckets aren't loaded yet
+  useEffect(() => {
+    // Check if we have buckets, if not, load them
+    // Only load if we're in customer mode and haven't loaded yet
+    if (localViewMode === 'customer' && !hasLoadedBucketsRef.current) {
+      // Small delay to ensure component is fully mounted
+      const checkTimer = setTimeout(() => {
+        if (buckets.length === 0 && localBuckets.length === 0) {
+          console.log('ActionBar: Component visible but no buckets, loading...');
+          loadPersonalBuckets();
+        }
+      }, 150);
+      return () => clearTimeout(checkTimer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localViewMode]);
+
+  // Load data based on view mode changes (after initial mount)
+  useEffect(() => {
+    // Skip if this is the initial mount (handled by the mount effect above)
+    if (localViewMode === 'customer') {
+      // Only reload if we don't have buckets (to avoid unnecessary calls on mount)
+      if (buckets.length === 0 && localBuckets.length === 0 && !hasLoadedBucketsRef.current) {
+        console.log('ActionBar: No buckets in view mode change, loading...');
+        loadPersonalBuckets();
+      }
+    } else if (localViewMode === 'team') {
+      // Only load teams if we don't have them locally or in Redux
+      if (localTeams.length === 0 && reduxTeams.length === 0) {
+        loadTeams();
+      } else if (reduxTeams.length > 0 && localTeams.length === 0) {
+        // Use Redux teams if available
+        setLocalTeams(reduxTeams);
+        localTeamsRef.current = reduxTeams;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localViewMode]);
+
+  // Additional safeguard: Load buckets when Redux store is ready but buckets are empty
+  // This handles cases where the component mounts before Redux is fully initialized
+  useEffect(() => {
+    // This effect runs whenever buckets change in Redux
+    // If buckets are empty and we're in customer mode, try to load
+    if (localViewMode === 'customer' && buckets.length === 0 && localBuckets.length === 0) {
+      console.log('ActionBar: Redux buckets empty, checking if we should load...', {
+        hasLoaded: hasLoadedBucketsRef.current
+      });
+      
+      // Only load if we haven't loaded yet, or if it's been a while (retry case)
+      if (!hasLoadedBucketsRef.current) {
+        const loadTimer = setTimeout(() => {
+          console.log('ActionBar: Triggering load from Redux safeguard...');
+          loadPersonalBuckets();
+        }, 300);
+        return () => clearTimeout(loadTimer);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buckets.length, localBuckets.length, localViewMode]);
+
+  // Sync teams from Redux
+  useEffect(() => {
+    if (reduxTeams.length > 0 && localViewMode === 'team') {
+      setLocalTeams(reduxTeams);
+      localTeamsRef.current = reduxTeams;
+      
+      // If we have a selected team ID but no local selection, find and select it
+      if (selectedTeamId && !localSelectedTeamId) {
+        const team = reduxTeams.find(t => (t.teamId || t.id) === selectedTeamId);
+        if (team) {
+          const teamName = team.teamName || team.name || 'Unnamed Team';
+          setLocalSelectedTeamId(selectedTeamId);
+          setSelectedTeamName(teamName);
+          const teamIndex = reduxTeams.findIndex(t => (t.teamId || t.id) === selectedTeamId);
+          if (teamIndex !== -1) {
+            setCurrentTeamIndex(teamIndex);
+            currentTeamIndexRef.current = teamIndex;
+          }
+          selectedTeamIdRef.current = selectedTeamId;
+          selectedTeamNameRef.current = teamName;
+          loadTeamBuckets(selectedTeamId);
+        }
+      }
+    }
+  }, [reduxTeams, localViewMode, selectedTeamId]);
+
+  useEffect(() => {
     // Setup IPC listeners with retry logic
     const setupIpcListeners = () => {
       console.log('ActionBar: Attempting to setup IPC listeners');
@@ -649,34 +829,63 @@ const ActionBar = () => {
   // Sync local bucket state with Redux state
   useEffect(() => {
     if (buckets && Array.isArray(buckets)) {
-      console.log('ActionBar: Syncing local bucket state with Redux:', buckets);
-      const names = buckets.map(bucket => bucket.name);
-      const ids = buckets.map(bucket => bucket.id);
+      // Filter buckets based on view mode
+      let filteredBuckets = buckets;
+      if (localViewMode === 'team' && localSelectedTeamId) {
+        // Only show buckets for the selected team
+        filteredBuckets = buckets.filter(b => 
+          (b.teamId || b.team_id) === localSelectedTeamId
+        );
+      } else if (localViewMode === 'customer') {
+        // Only show personal buckets (no teamId)
+        filteredBuckets = buckets.filter(b => 
+          !b.teamId && !b.team_id
+        );
+      }
       
-      setLocalBuckets(buckets);
+      console.log('ActionBar: Syncing local bucket state with Redux:', {
+        allBuckets: buckets.length,
+        filteredBuckets: filteredBuckets.length,
+        viewMode: localViewMode,
+        teamId: localSelectedTeamId
+      });
+      
+      const names = filteredBuckets.map(bucket => bucket.name || bucket.bucketName);
+      const ids = filteredBuckets.map(bucket => bucket.id || bucket.bucketId);
+      
+      setLocalBuckets(filteredBuckets);
       setBucketNames(names);
       setBucketIds(ids);
       
       // Update refs for event handlers
-      localBucketsRef.current = buckets;
+      localBucketsRef.current = filteredBuckets;
       bucketNamesRef.current = names;
       bucketIdsRef.current = ids;
       
       console.log('ActionBar: Local bucket state and refs updated:', {
-        totalBuckets: buckets.length,
+        totalBuckets: filteredBuckets.length,
         bucketNames: names,
         bucketIds: ids
       });
       
       // Set first bucket as default when buckets are loaded and no option is selected
-      if (buckets.length > 0 && selectedOption === 'Select Option') {
-        setSelectedOption(buckets[0].name);
-        setSelectedBucketId(buckets[0].id);
+      if (filteredBuckets.length > 0 && selectedOption === 'Select Option') {
+        const firstBucket = filteredBuckets[0];
+        const bucketName = firstBucket.name || firstBucket.bucketName;
+        const bucketId = firstBucket.id || firstBucket.bucketId;
+        setSelectedOption(bucketName);
+        setSelectedBucketId(bucketId);
         setCurrentBucketIndex(0);
-        selectedOptionRef.current = buckets[0].name;
-        selectedBucketIdRef.current = buckets[0].id;
+        selectedOptionRef.current = bucketName;
+        selectedBucketIdRef.current = bucketId;
         currentBucketIndexRef.current = 0;
-        console.log('ActionBar: Set default selection to:', buckets[0].name, 'with ID:', buckets[0].id, 'at index 0');
+        console.log('ActionBar: Set default selection to:', bucketName, 'with ID:', bucketId, 'at index 0');
+      } else if (filteredBuckets.length === 0) {
+        // Clear selection if no buckets available
+        setSelectedOption('Select Option');
+        setSelectedBucketId(null);
+        selectedOptionRef.current = 'Select Option';
+        selectedBucketIdRef.current = null;
       }
     } else {
       console.log('ActionBar: Clearing local bucket state - no buckets available');
@@ -687,7 +896,7 @@ const ActionBar = () => {
       bucketNamesRef.current = [];
       bucketIdsRef.current = [];
     }
-  }, [buckets, selectedOption]);
+  }, [buckets, selectedOption, localViewMode, localSelectedTeamId]);
 
   // Navigation functions for bucket selection
   const handlePreviousBucket = () => {
@@ -699,13 +908,15 @@ const ActionBar = () => {
     
     const selectedBucket = localBuckets[newIndex];
     if (selectedBucket) {
-      setSelectedOption(selectedBucket.name);
-      setSelectedBucketId(selectedBucket.id);
-      selectedOptionRef.current = selectedBucket.name;
-      selectedBucketIdRef.current = selectedBucket.id;
+      const bucketName = selectedBucket.name || selectedBucket.bucketName || 'Unnamed Bucket';
+      const bucketId = selectedBucket.id || selectedBucket.bucketId;
+      setSelectedOption(bucketName);
+      setSelectedBucketId(bucketId);
+      selectedOptionRef.current = bucketName;
+      selectedBucketIdRef.current = bucketId;
       console.log('ActionBar: Previous bucket selected:', {
-        name: selectedBucket.name,
-        id: selectedBucket.id,
+        name: bucketName,
+        id: bucketId,
         index: newIndex
       });
     }
@@ -720,15 +931,199 @@ const ActionBar = () => {
     
     const selectedBucket = localBuckets[newIndex];
     if (selectedBucket) {
-      setSelectedOption(selectedBucket.name);
-      setSelectedBucketId(selectedBucket.id);
-      selectedOptionRef.current = selectedBucket.name;
-      selectedBucketIdRef.current = selectedBucket.id;
+      const bucketName = selectedBucket.name || selectedBucket.bucketName || 'Unnamed Bucket';
+      const bucketId = selectedBucket.id || selectedBucket.bucketId;
+      setSelectedOption(bucketName);
+      setSelectedBucketId(bucketId);
+      selectedOptionRef.current = bucketName;
+      selectedBucketIdRef.current = bucketId;
       console.log('ActionBar: Next bucket selected:', {
-        name: selectedBucket.name,
-        id: selectedBucket.id,
+        name: bucketName,
+        id: bucketId,
         index: newIndex
       });
+    }
+  };
+
+  // Navigation functions for team selection
+  const handlePreviousTeam = () => {
+    if (localTeams.length === 0) return;
+    
+    const newIndex = currentTeamIndex > 0 ? currentTeamIndex - 1 : localTeams.length - 1;
+    setCurrentTeamIndex(newIndex);
+    currentTeamIndexRef.current = newIndex;
+    
+    const selectedTeam = localTeams[newIndex];
+    if (selectedTeam) {
+      const teamId = selectedTeam.teamId || selectedTeam.id;
+      const teamName = selectedTeam.teamName || selectedTeam.name || 'Unnamed Team';
+      setLocalSelectedTeamId(teamId);
+      setSelectedTeamName(teamName);
+      selectedTeamIdRef.current = teamId;
+      selectedTeamNameRef.current = teamName;
+      
+      // Update Redux state
+      dispatch(setSelectedTeamId(teamId));
+      
+      // Fetch team buckets
+      loadTeamBuckets(teamId);
+      
+      console.log('ActionBar: Previous team selected:', {
+        name: teamName,
+        id: teamId,
+        index: newIndex
+      });
+    }
+  };
+
+  const handleNextTeam = () => {
+    if (localTeams.length === 0) return;
+    
+    const newIndex = currentTeamIndex < localTeams.length - 1 ? currentTeamIndex + 1 : 0;
+    setCurrentTeamIndex(newIndex);
+    currentTeamIndexRef.current = newIndex;
+    
+    const selectedTeam = localTeams[newIndex];
+    if (selectedTeam) {
+      const teamId = selectedTeam.teamId || selectedTeam.id;
+      const teamName = selectedTeam.teamName || selectedTeam.name || 'Unnamed Team';
+      setLocalSelectedTeamId(teamId);
+      setSelectedTeamName(teamName);
+      selectedTeamIdRef.current = teamId;
+      selectedTeamNameRef.current = teamName;
+      
+      // Update Redux state
+      dispatch(setSelectedTeamId(teamId));
+      
+      // Fetch team buckets
+      loadTeamBuckets(teamId);
+      
+      console.log('ActionBar: Next team selected:', {
+        name: teamName,
+        id: teamId,
+        index: newIndex
+      });
+    }
+  };
+
+  // Handle view mode toggle
+  const handleViewModeToggle = (mode) => {
+    if (mode === localViewMode) return;
+    
+    setLocalViewMode(mode);
+    dispatch(setViewMode(mode));
+    
+    if (mode === 'customer') {
+      // Switch to personal mode - fetch personal buckets
+      setLocalSelectedTeamId(null);
+      setSelectedTeamName('Select Team');
+      selectedTeamIdRef.current = null;
+      selectedTeamNameRef.current = 'Select Team';
+      dispatch(setSelectedTeamId(null));
+      loadPersonalBuckets();
+    } else {
+      // Switch to team mode - fetch teams
+      loadTeams();
+    }
+  };
+
+
+  // Load teams
+  const loadTeams = async () => {
+    try {
+      // First try using thunk (which uses service with auth)
+      const result = await dispatch(fetchAllTeams());
+      if (fetchAllTeams.fulfilled.match(result)) {
+        const teams = result.payload || [];
+        setLocalTeams(teams);
+        localTeamsRef.current = teams;
+        
+        // Auto-select first team if available
+        if (teams.length > 0) {
+          const firstTeam = teams[0];
+          const teamId = firstTeam.teamId || firstTeam.id;
+          const teamName = firstTeam.teamName || firstTeam.name || 'Unnamed Team';
+          setLocalSelectedTeamId(teamId);
+          setSelectedTeamName(teamName);
+          setCurrentTeamIndex(0);
+          selectedTeamIdRef.current = teamId;
+          selectedTeamNameRef.current = teamName;
+          currentTeamIndexRef.current = 0;
+          dispatch(setSelectedTeamId(teamId));
+          loadTeamBuckets(teamId);
+        }
+        console.log('ActionBar: Teams loaded:', teams);
+      } else {
+        // Fallback: direct API call with token
+        const token = await getClerkToken();
+        if (!token) {
+          console.error('ActionBar: No token available for fetching teams');
+          return;
+        }
+        
+        const teams = await getAllTeams();
+        if (Array.isArray(teams)) {
+          setLocalTeams(teams);
+          localTeamsRef.current = teams;
+          dispatch(fetchAllTeams()); // Update Redux
+          
+          if (teams.length > 0) {
+            const firstTeam = teams[0];
+            const teamId = firstTeam.teamId || firstTeam.id;
+            const teamName = firstTeam.teamName || firstTeam.name || 'Unnamed Team';
+            setLocalSelectedTeamId(teamId);
+            setSelectedTeamName(teamName);
+            setCurrentTeamIndex(0);
+            selectedTeamIdRef.current = teamId;
+            selectedTeamNameRef.current = teamName;
+            currentTeamIndexRef.current = 0;
+            dispatch(setSelectedTeamId(teamId));
+            loadTeamBuckets(teamId);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('ActionBar: Error loading teams:', error);
+      // Fallback to Redux state if available (will be handled by useEffect)
+    }
+  };
+
+  // Load team buckets
+  const loadTeamBuckets = async (teamId) => {
+    if (!teamId) return;
+    
+    try {
+      // First try using thunk
+      const result = await dispatch(fetchTeamBuckets(teamId));
+      if (fetchTeamBuckets.fulfilled.match(result)) {
+        console.log('ActionBar: Team buckets loaded:', result.payload);
+      } else {
+        // Fallback: direct API call
+        const token = await getClerkToken();
+        if (!token) {
+          console.error('ActionBar: No token available for fetching team buckets');
+          return;
+        }
+        
+        const buckets = await getAllTeamBuckets(teamId);
+        if (Array.isArray(buckets)) {
+          // Normalize buckets
+          const normalizedBuckets = buckets.map(bucket => ({
+            bucketId: bucket.bucketId || bucket.id || bucket.bucket_id,
+            bucketName: bucket.bucketName || bucket.name || bucket.bucket_name || '',
+            teamId: bucket.teamId || bucket.team_id || teamId,
+            customerId: null,
+            id: bucket.bucketId || bucket.id || bucket.bucket_id,
+            name: bucket.bucketName || bucket.name || bucket.bucket_name || ''
+          }));
+          
+          dispatch(setBuckets(normalizedBuckets, true));
+          dispatch(fetchTeamBuckets(teamId)); // Update Redux via thunk
+        }
+      }
+    } catch (error) {
+      console.error('ActionBar: Error loading team buckets:', error);
+      // Fallback to Redux state if available (will be handled by useEffect)
     }
   };
 
@@ -849,13 +1244,32 @@ const ActionBar = () => {
       
       const firstBucket = localBuckets[0];
       if (firstBucket) {
-        setSelectedOption(firstBucket.name);
-        setSelectedBucketId(firstBucket.id);
-        selectedOptionRef.current = firstBucket.name;
-        selectedBucketIdRef.current = firstBucket.id;
+        const bucketName = firstBucket.name || firstBucket.bucketName;
+        const bucketId = firstBucket.id || firstBucket.bucketId;
+        setSelectedOption(bucketName);
+        setSelectedBucketId(bucketId);
+        selectedOptionRef.current = bucketName;
+        selectedBucketIdRef.current = bucketId;
       }
     }
   }, [localBuckets, currentBucketIndex]);
+
+  // Calculate dynamic width based on content
+  useEffect(() => {
+    const updateWidth = () => {
+      if (barContentRef.current) {
+        const width = barContentRef.current.offsetWidth;
+        setDynamicBarWidth(Math.max(160, width + 20)); // Add padding, minimum 160px
+      }
+    };
+    
+    // Update width after render
+    setTimeout(updateWidth, 0);
+    
+    // Also update on window resize
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [localViewMode, localTeams.length, localBuckets.length, selectedTeamName, selectedOption, localSelectedTeamId]);
 
   return (
     <HoverComponent>
@@ -920,19 +1334,186 @@ const ActionBar = () => {
         }} />
 
          {/* Action bar background */}
-         <div style={{
-           background: themeColors.primaryBackground,
-           backdropFilter: 'blur(10px)',
-           borderRadius: '8px',
-           padding: '8px',
-           display: 'flex',
-           alignItems: 'center',
-           gap: '8px',
-           boxShadow: '0 6px 24px rgba(0, 0, 0, 0.4)',
-           border: `1px solid ${themeColors.borderColor}`,
-           minWidth: '160px',
-           position: 'relative'
-         }}>
+         <div 
+           ref={barContentRef}
+           style={{
+             background: themeColors.primaryBackground,
+             backdropFilter: 'blur(10px)',
+             borderRadius: '8px',
+             padding: '8px',
+             display: 'flex',
+             alignItems: 'center',
+             gap: '8px',
+             boxShadow: '0 6px 24px rgba(0, 0, 0, 0.4)',
+             border: `1px solid ${themeColors.borderColor}`,
+             minWidth: '160px',
+             position: 'relative'
+           }}
+         >
+           {/* Personal/Team Toggle */}
+           <div style={{
+             display: 'flex',
+             background: themeColors.surfaceBackground,
+             borderRadius: '6px',
+             padding: '2px',
+             border: `1px solid ${themeColors.borderColor}`
+           }}>
+             <button
+               onClick={() => handleViewModeToggle('customer')}
+               style={{
+                 padding: '4px 8px',
+                 fontSize: '10px',
+                 fontWeight: '600',
+                 borderRadius: '4px',
+                 border: 'none',
+                 cursor: 'pointer',
+                 background: localViewMode === 'customer' ? themeColors.primaryBlue : 'transparent',
+                 color: localViewMode === 'customer' ? '#FFFFFF' : themeColors.secondaryText,
+                 transition: 'all 0.2s ease',
+                 whiteSpace: 'nowrap'
+               }}
+               onMouseEnter={(e) => {
+                 if (localViewMode !== 'customer') {
+                   e.target.style.background = themeColors.hoverBackground;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localViewMode !== 'customer') {
+                   e.target.style.background = 'transparent';
+                 }
+               }}
+             >
+               Personal
+             </button>
+             <button
+               onClick={() => handleViewModeToggle('team')}
+               style={{
+                 padding: '4px 8px',
+                 fontSize: '10px',
+                 fontWeight: '600',
+                 borderRadius: '4px',
+                 border: 'none',
+                 cursor: 'pointer',
+                 background: localViewMode === 'team' ? themeColors.primaryBlue : 'transparent',
+                 color: localViewMode === 'team' ? '#FFFFFF' : themeColors.secondaryText,
+                 transition: 'all 0.2s ease',
+                 whiteSpace: 'nowrap'
+               }}
+               onMouseEnter={(e) => {
+                 if (localViewMode !== 'team') {
+                   e.target.style.background = themeColors.hoverBackground;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localViewMode !== 'team') {
+                   e.target.style.background = 'transparent';
+                 }
+               }}
+             >
+               Team
+             </button>
+           </div>
+
+           {/* Team Selection (only visible in team mode and when teams are available) */}
+           {localViewMode === 'team' && localTeams.length > 0 && (
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+               {/* Previous Team Button */}
+               <button
+                 onClick={handlePreviousTeam}
+                 style={{
+                   background: themeColors.surfaceBackground,
+                   border: `1px solid ${themeColors.borderColor}`,
+                   borderRadius: '4px',
+                   padding: '4px 6px',
+                   color: themeColors.primaryText,
+                   fontSize: '10px',
+                   cursor: 'pointer',
+                   transition: 'all 0.2s ease',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   minWidth: '24px'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }}
+                 onMouseLeave={(e) => {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }}
+                 title="Previous team"
+               >
+                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                   <polyline points="15,18 9,12 15,6"></polyline>
+                 </svg>
+               </button>
+
+               {/* Current Team Name Display - Dynamic width to fit full name */}
+               <div style={{
+                 background: themeColors.surfaceBackground,
+                 border: `1px solid ${themeColors.borderColor}`,
+                 borderRadius: '6px',
+                 padding: '6px 10px',
+                 color: themeColors.primaryText,
+                 fontSize: '11px',
+                 fontWeight: '600',
+                 textAlign: 'center',
+                 minWidth: '60px',
+                 whiteSpace: 'nowrap'
+               }}>
+                 {selectedTeamName}
+               </div>
+
+               {/* Next Team Button */}
+               <button
+                 onClick={handleNextTeam}
+                 style={{
+                   background: themeColors.surfaceBackground,
+                   border: `1px solid ${themeColors.borderColor}`,
+                   borderRadius: '4px',
+                   padding: '4px 6px',
+                   color: themeColors.primaryText,
+                   fontSize: '10px',
+                   cursor: 'pointer',
+                   transition: 'all 0.2s ease',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   minWidth: '24px'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }}
+                 onMouseLeave={(e) => {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }}
+                 title="Next team"
+               >
+                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                   <polyline points="9,18 15,12 9,6"></polyline>
+                 </svg>
+               </button>
+
+               {/* Team Counter Display */}
+               <div style={{
+                 background: themeColors.surfaceBackground,
+                 border: `1px solid ${themeColors.borderColor}`,
+                 borderRadius: '6px',
+                 padding: '6px 8px',
+                 color: themeColors.secondaryText,
+                 fontSize: '10px',
+                 fontWeight: '500',
+                 textAlign: 'center',
+                 minWidth: '40px'
+               }}>
+                 {`${currentTeamIndex + 1}/${localTeams.length}`}
+               </div>
+             </div>
+           )}
+
            {/* Bucket Navigation */}
            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
              {/* Previous Button */}
@@ -973,7 +1554,7 @@ const ActionBar = () => {
                </svg>
              </button>
 
-             {/* Current Bucket Name Display */}
+             {/* Current Bucket Name Display - Dynamic width to fit full name */}
              <div style={{
                background: themeColors.surfaceBackground,
                border: `1px solid ${themeColors.borderColor}`,
@@ -984,9 +1565,6 @@ const ActionBar = () => {
                fontWeight: '600',
                textAlign: 'center',
                minWidth: '60px',
-               maxWidth: '80px',
-               overflow: 'hidden',
-               textOverflow: 'ellipsis',
                whiteSpace: 'nowrap'
              }}>
                {selectedOption}
