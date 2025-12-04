@@ -48,13 +48,40 @@ if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.on
     try {
       console.log('Received broadcasted Redux action:', actionData.type);
       
+      // Check if this action needs context (buckets or leads actions)
+      const needsContext = actionData.type.startsWith('buckets/') || actionData.type.startsWith('leads/');
+      
+      // Reconstruct payload based on whether it needs context
+      let payload;
+      if (needsContext) {
+        // Buckets/leads actions: payload should have { data, context } structure
+        if (actionData.payload && typeof actionData.payload === 'object' && 'context' in actionData.payload) {
+          // Payload has context (team or personal buckets/leads)
+          payload = {
+            data: actionData.payload.data,
+            context: actionData.payload.context,
+            broadcast: false
+          };
+        } else {
+          // Fallback: treat payload as data, context defaults to 'personal' in reducer
+          payload = {
+            data: actionData.payload,
+            context: 'personal',
+            broadcast: false
+          };
+        }
+      } else {
+        // Other actions (teams, etc.): payload is just data
+        payload = {
+          data: actionData.payload,
+          broadcast: false
+        };
+      }
+      
       // Dispatch action with broadcast=false to update local state
       store.dispatch({
         type: actionData.type,
-        payload: { 
-          data: actionData.payload, 
-          broadcast: false // This will update the local state
-        }
+        payload
       });
     } catch (error) {
       console.error('Error processing broadcasted Redux action:', error);
