@@ -10,24 +10,46 @@ import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 const Leads = () => {
   const dispatch = useDispatch();
   
-  // Get view mode and selected team
+  // Get data from Redux state
+  const { leads, loading, selectedBucketId } = useSelector((state) => state.leads);
+  const { buckets, loading: bucketsLoading, error: bucketsError } = useSelector((state) => state.buckets);
   const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
   
-  // Read directly from Redux state based on view mode - no filtering needed
-  const bucketsState = viewMode === 'team' && selectedTeamId
-    ? useSelector((state) => state.buckets.teams[selectedTeamId] || { buckets: [], loading: false, error: null, selectedBucketId: null })
-    : useSelector((state) => state.buckets.personal);
+  // Filter buckets based on view mode
+  let filteredBuckets = Array.isArray(buckets) ? buckets : [];
+  if (viewMode === 'team' && selectedTeamId) {
+    filteredBuckets = filteredBuckets.filter(bucket => 
+      (bucket.teamId || bucket.team_id) === selectedTeamId && !bucket.customerId
+    );
+  } else if (viewMode === 'customer') {
+    filteredBuckets = filteredBuckets.filter(bucket => 
+      !bucket.teamId && !bucket.team_id
+    );
+  }
   
-  const leadsState = viewMode === 'team' && selectedTeamId
-    ? useSelector((state) => state.leads.teams[selectedTeamId] || { leads: [], loading: false, error: null, selectedBucketId: null })
-    : useSelector((state) => state.leads.personal);
-  
-  const { buckets, loading: bucketsLoading, error: bucketsError, selectedBucketId: bucketsSelectedBucketId } = bucketsState;
-  const { leads, loading, selectedBucketId } = leadsState;
-  
-  // Use buckets and leads directly from Redux - already filtered by context
-  const filteredBuckets = Array.isArray(buckets) ? buckets : [];
-  const filteredLeads = Array.isArray(leads) ? leads : [];
+  // Filter leads by selected bucket and view mode
+  let filteredLeads = Array.isArray(leads) ? leads : [];
+  if (viewMode === 'team' && selectedTeamId) {
+    // In team mode, only show team leads
+    filteredLeads = filteredLeads.filter(lead => 
+      (lead.teamId || lead.team_id) === selectedTeamId && !lead.customerId
+    );
+    if (selectedBucketId) {
+      filteredLeads = filteredLeads.filter(lead => 
+        lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId
+      );
+    }
+  } else if (viewMode === 'customer') {
+    // In customer mode, only show personal leads
+    filteredLeads = filteredLeads.filter(lead => 
+      !lead.teamId && !lead.team_id
+    );
+    if (selectedBucketId) {
+      filteredLeads = filteredLeads.filter(lead => 
+        lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId
+      );
+    }
+  }
 
   // Fetch buckets and leads based on view mode
   useEffect(() => {
@@ -48,11 +70,10 @@ const Leads = () => {
           // Set first bucket as default if available
           if (bucketsData.length > 0) {
             const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
-            dispatch(setSelectedBucketId(firstBucketId, selectedTeamId, true));
+            dispatch(setSelectedBucketId(firstBucketId));
             await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: firstBucketId }));
           } else {
             // If no buckets, load all team leads
-            dispatch(setSelectedBucketId(null, selectedTeamId, true));
             await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: null }));
           }
         }
@@ -64,17 +85,16 @@ const Leads = () => {
         if (fetchBuckets.fulfilled.match(bucketsResult)) {
           bucketsData = bucketsResult.payload;
         } else {
-          bucketsData = [];
+          bucketsData = buckets;
         }
         
         // Set first bucket as default if available
         if (bucketsData.length > 0) {
           const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
-          dispatch(setSelectedBucketId(firstBucketId, 'personal', true));
+          dispatch(setSelectedBucketId(firstBucketId));
           await dispatch(fetchLeads(firstBucketId));
         } else {
           // If no buckets, load all leads
-          dispatch(setSelectedBucketId(null, 'personal', true));
           await dispatch(fetchLeads(null));
         }
       }
@@ -85,11 +105,10 @@ const Leads = () => {
 
   // Handle bucket selection
   const handleBucketChange = (bucketId) => {
+    dispatch(setSelectedBucketId(bucketId));
     if (viewMode === 'team' && selectedTeamId) {
-      dispatch(setSelectedBucketId(bucketId, selectedTeamId, true));
       dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: bucketId || null }));
     } else {
-      dispatch(setSelectedBucketId(bucketId, 'personal', true));
       dispatch(fetchLeads(bucketId || null));
     }
   };

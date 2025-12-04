@@ -17,7 +17,7 @@ export const createTeamBucket = createAsyncThunk(
   'teamBuckets/createTeamBucket',
   async ({ teamId, bucketName }, { dispatch, rejectWithValue }) => {
     try {
-      dispatch(setLoading(true, teamId, true));
+      dispatch(setLoading(true));
       const response = await leadflowService.addTeamBucket(teamId, bucketName);
       
       if (response.status_code >= 200 && response.status_code < 300) {
@@ -29,20 +29,19 @@ export const createTeamBucket = createAsyncThunk(
           ...response.content
         };
         
-        // Store in team context - Broadcast to all windows (broadcast=true)
-        dispatch(addBucketAction(normalizedBucket, teamId, true));
+        dispatch(addBucketAction(normalizedBucket, true));
         return normalizedBucket;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create team bucket';
-        dispatch(setError(errorMessage, teamId, true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to create team bucket';
-      dispatch(setError(errorMessage, teamId, true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     } finally {
-      dispatch(setLoading(false, teamId, true));
+      dispatch(setLoading(false));
     }
   }
 );
@@ -55,9 +54,9 @@ export const fetchTeamBuckets = createAsyncThunk(
   'teamBuckets/fetchTeamBuckets',
   async (teamId, { dispatch, rejectWithValue }) => {
     try {
-      dispatch(setLoading(true, teamId, true));
+      dispatch(setLoading(true));
       // Clear buckets first to avoid showing stale data
-      dispatch(setBuckets([], teamId, true));
+      dispatch(setBuckets([], true));
       
       const buckets = await leadflowService.getAllTeamBuckets(teamId);
       
@@ -71,9 +70,9 @@ export const fetchTeamBuckets = createAsyncThunk(
       // Handle case where buckets is not an array (error response)
       if (!Array.isArray(buckets)) {
         console.error('fetchTeamBuckets: buckets is not an array', { buckets, teamId });
-        dispatch(setBuckets([], teamId, true));
+        dispatch(setBuckets([], true));
         const errorMessage = 'Failed to fetch team buckets: Invalid response format';
-        dispatch(setError(errorMessage, teamId, true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
       
@@ -100,8 +99,8 @@ export const fetchTeamBuckets = createAsyncThunk(
         allBuckets: normalizedBuckets
       });
       
-      // Store in team context - Broadcast to all windows (broadcast=true)
-      dispatch(setBuckets(normalizedBuckets, teamId, true));
+      // Broadcast to all windows (broadcast=true) - this also updates local state now
+      dispatch(setBuckets(normalizedBuckets, true));
       
       console.log('fetchTeamBuckets: Dispatched setBuckets', { 
         teamId,
@@ -110,13 +109,13 @@ export const fetchTeamBuckets = createAsyncThunk(
       
       return normalizedBuckets;
     } catch (error) {
-      // Clear buckets on error to avoid showing stale data
-      dispatch(setBuckets([], teamId, true));
+      // Clear buckets on error to avoid showing stale personal buckets
+      dispatch(setBuckets([], true));
       const errorMessage = error.message || 'Failed to fetch team buckets';
-      dispatch(setError(errorMessage, teamId, true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     } finally {
-      dispatch(setLoading(false, teamId, true));
+      dispatch(setLoading(false));
     }
   }
 );
@@ -139,17 +138,16 @@ export const updateTeamBucketName = createAsyncThunk(
           customerId: null
         };
         
-        // Store in team context - Broadcast to all windows (broadcast=true)
-        dispatch(updateBucketAction(updatedBucket, teamId, true));
+        dispatch(updateBucketAction(updatedBucket, true));
         return { teamId, bucketId, bucketName };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update team bucket name';
-        dispatch(setError(errorMessage, teamId, true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update team bucket name';
-      dispatch(setError(errorMessage, teamId, true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }
@@ -166,17 +164,16 @@ export const removeTeamBucket = createAsyncThunk(
       const response = await leadflowService.deleteTeamBucket(teamId, bucketId);
       
       if (response.status_code === 200) {
-        // Store in team context - Broadcast to all windows (broadcast=true)
-        dispatch(deleteBucketAction(bucketId, teamId, true));
+        dispatch(deleteBucketAction(bucketId, true));
         return { teamId, bucketId };
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete team bucket';
-        dispatch(setError(errorMessage, teamId, true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to delete team bucket';
-      dispatch(setError(errorMessage, teamId, true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }

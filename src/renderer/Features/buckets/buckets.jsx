@@ -8,33 +8,81 @@ import { setBuckets } from '../../../store/slices/bucketsSlice';
 
 const Buckets = () => {
     const dispatch = useDispatch();
+    const { buckets, loading, error } = useSelector((state) => state.buckets);
     const { viewMode: teamViewMode, selectedTeamId } = useSelector((state) => state.teams);
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
     const [isModalOpen, setIsModalOpen] = useState(false);
     
-    // Read directly from Redux state based on view mode - no filtering needed
-    const bucketsState = teamViewMode === 'team' && selectedTeamId
-        ? useSelector((state) => state.buckets.teams[selectedTeamId] || { buckets: [], loading: false, error: null })
-        : useSelector((state) => state.buckets.personal);
+    // Filter buckets based on view mode to ensure we only show relevant buckets
+    let bucketsArray = Array.isArray(buckets) ? buckets : [];
     
-    const { buckets, loading, error } = bucketsState;
+    console.log('Buckets component: Raw buckets from Redux', { 
+        count: bucketsArray.length, 
+        teamViewMode, 
+        selectedTeamId,
+        rawBuckets: buckets,
+        bucketsArray: bucketsArray.map(b => ({ 
+            bucketId: b.bucketId || b.id, 
+            bucketName: b.bucketName || b.name, 
+            teamId: b.teamId || b.team_id,
+            customerId: b.customerId,
+            fullBucket: b
+        }))
+    });
     
-    // Use buckets directly from Redux - already filtered by context
-    const bucketsArray = Array.isArray(buckets) ? buckets : [];
+    if (teamViewMode === 'team' && selectedTeamId) {
+        // In team mode, only show buckets for the selected team (filter out personal buckets)
+        bucketsArray = bucketsArray.filter(bucket => {
+            const bucketTeamId = bucket.teamId || bucket.team_id;
+            const matches = bucketTeamId === selectedTeamId && !bucket.customerId;
+            if (!matches && bucketTeamId) {
+                console.log('Buckets component: Filtered out bucket (team mode)', {
+                    bucketId: bucket.bucketId || bucket.id,
+                    bucketTeamId,
+                    selectedTeamId,
+                    hasCustomerId: !!bucket.customerId
+                });
+            }
+            return matches;
+        });
+    } else if (teamViewMode === 'customer') {
+        // In customer mode, only show personal buckets (filter out team buckets)
+        bucketsArray = bucketsArray.filter(bucket => {
+            const hasTeamId = !!(bucket.teamId || bucket.team_id);
+            if (hasTeamId) {
+                console.log('Buckets component: Filtered out bucket (customer mode)', {
+                    bucketId: bucket.bucketId || bucket.id,
+                    teamId: bucket.teamId || bucket.team_id
+                });
+            }
+            return !hasTeamId;
+        });
+    }
+    
+    console.log('Buckets component: Filtered buckets array', { 
+        count: bucketsArray.length, 
+        teamViewMode, 
+        selectedTeamId,
+        filteredBuckets: bucketsArray.map(b => ({ 
+            bucketId: b.bucketId || b.id, 
+            bucketName: b.bucketName || b.name,
+            teamId: b.teamId || b.team_id
+        }))
+    });
 
     // Fetch buckets based on view mode
     useEffect(() => {
         if (teamViewMode === 'team' && selectedTeamId) {
             // Clear buckets first, then fetch team buckets
-            dispatch(setBuckets([], selectedTeamId, false));
+            dispatch(setBuckets([], false));
             dispatch(fetchTeamBuckets(selectedTeamId));
         } else if (teamViewMode === 'customer') {
             // Clear buckets first, then fetch customer buckets
-            dispatch(setBuckets([], 'personal', false));
+            dispatch(setBuckets([], false));
             dispatch(fetchBuckets());
         } else {
             // Clear buckets if in team mode but no team selected
-            dispatch(setBuckets([], 'personal', false));
+            dispatch(setBuckets([]));
         }
     }, [dispatch, teamViewMode, selectedTeamId]);
 

@@ -11,167 +11,76 @@ import { createSlice } from '@reduxjs/toolkit';
 const leadsSlice = createSlice({
   name: 'leads',
   initialState: {
-    personal: {
-      leads: [], // Array of lead objects
-      loading: false,
-      error: null,
-      lastFetched: null, // Timestamp of last successful fetch
-      selectedBucketId: null, // Currently selected bucket filter
-    },
-    teams: {}, // Object keyed by teamId: { leads: [], loading: false, error: null, lastFetched: null, selectedBucketId: null }
+    leads: [], // Array of lead objects
+    loading: false,
+    error: null,
+    lastFetched: null, // Timestamp of last successful fetch
+    selectedBucketId: null, // Currently selected bucket filter
   },
   reducers: {
     // Set all leads (used after fetching from API)
-    // context: 'personal' or teamId string
     setLeads: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        const leadsData = Array.isArray(data) ? data : [];
-        
-        // Initialize team state if it doesn't exist
-        if (context !== 'personal' && !state.teams[context]) {
-          state.teams[context] = {
-            leads: [],
-            loading: false,
-            error: null,
-            lastFetched: null,
-            selectedBucketId: null,
-          };
-        }
-        
-        // Update the target state
-        if (context === 'personal') {
-          state.personal.leads = leadsData;
-          state.personal.loading = false;
-          state.personal.error = null;
-          state.personal.lastFetched = Date.now();
-        } else {
-          state.teams[context].leads = leadsData;
-          state.teams[context].loading = false;
-          state.teams[context].error = null;
-          state.teams[context].lastFetched = Date.now();
-        }
+        // Always update local state (broadcast flag is only for middleware to decide whether to broadcast)
+        // Ensure we always set an array, even if data is undefined/null
+        state.leads = Array.isArray(action.payload.data) ? action.payload.data : [];
+        state.loading = false;
+        state.error = null;
+        state.lastFetched = Date.now();
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Set loading state
-    // context: 'personal' or teamId string
     setLoading: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
-          state.teams[context] = {
-            leads: [],
-            loading: false,
-            error: null,
-            lastFetched: null,
-            selectedBucketId: null,
-          };
-        }
-        
-        if (context === 'personal') {
-          state.personal.loading = data;
-          if (data) {
-            state.personal.error = null;
-          }
-        } else {
-          state.teams[context].loading = data;
-          if (data) {
-            state.teams[context].error = null;
-          }
+        // Always update local state (broadcast flag is only for middleware)
+        state.loading = action.payload.data;
+        if (action.payload.data) {
+          state.error = null; // Clear error when starting to load
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Set error state
-    // context: 'personal' or teamId string
     setError: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
-          state.teams[context] = {
-            leads: [],
-            loading: false,
-            error: null,
-            lastFetched: null,
-            selectedBucketId: null,
-          };
-        }
-        
-        if (context === 'personal') {
-          state.personal.error = data;
-          state.personal.loading = false;
-        } else {
-          state.teams[context].error = data;
-          state.teams[context].loading = false;
-        }
+        // Always update local state (broadcast flag is only for middleware)
+        state.error = action.payload.data;
+        state.loading = false;
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Set selected bucket ID for filtering
-    // context: 'personal' or teamId string
     setSelectedBucketId: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
-          state.teams[context] = {
-            leads: [],
-            loading: false,
-            error: null,
-            lastFetched: null,
-            selectedBucketId: null,
-          };
-        }
-        
-        if (context === 'personal') {
-          state.personal.selectedBucketId = data;
-        } else {
-          state.teams[context].selectedBucketId = data;
-        }
+        // Always update local state (broadcast flag is only for middleware)
+        state.selectedBucketId = action.payload.data;
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Add a new lead
-    // context: 'personal' or teamId string
     addLead: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
-          state.teams[context] = {
-            leads: [],
-            loading: false,
-            error: null,
-            lastFetched: null,
-            selectedBucketId: null,
-          };
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          if (context === 'personal') {
-            state.personal.leads = [];
-          } else {
-            state.teams[context].leads = [];
-          }
-        }
-        
-        const lead = data;
+        const lead = action.payload.data;
+        // Normalize lead to ensure required fields exist
         const normalizedLead = {
           leadId: lead.leadId || lead.id || lead.lead_id,
           url: lead.url || '',
@@ -181,97 +90,82 @@ const leadsSlice = createSlice({
           bucketId: lead.bucketId || lead.bucket_id,
           notes: lead.notes || null,
           createdAt: lead.createdAt || new Date().toISOString(),
-          ...lead
+          ...lead // Preserve other fields
         };
         
-        const targetLeads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        const exists = targetLeads.some(l => 
+        // Check if lead already exists
+        const exists = state.leads.some(l => 
           l.leadId === normalizedLead.leadId || 
           (l.id && l.id === normalizedLead.leadId)
         );
         
         if (!exists) {
-          targetLeads.push(normalizedLead);
+          state.leads.push(normalizedLead);
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Update lead status
-    // context: 'personal' or teamId string
     updateLeadStatus: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const { leadId, status } = data;
-        const lead = leads.find(l => 
+        const { leadId, status } = action.payload.data;
+        const lead = state.leads.find(l => 
           l.leadId === leadId || l.id === leadId
         );
         if (lead) {
           lead.status = status;
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Update lead notes
-    // context: 'personal' or teamId string
     updateLeadNotes: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const { leadId, notes } = data;
-        const lead = leads.find(l => 
+        const { leadId, notes } = action.payload.data;
+        const lead = state.leads.find(l => 
           l.leadId === leadId || l.id === leadId
         );
         if (lead) {
           lead.notes = notes;
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Update entire lead object
-    // context: 'personal' or teamId string
     updateLead: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const updatedLead = data;
-        const leadIndex = leads.findIndex(l => 
+        const updatedLead = action.payload.data;
+        const leadIndex = state.leads.findIndex(l => 
           l.leadId === updatedLead.leadId || 
           l.id === updatedLead.leadId ||
           l.leadId === updatedLead.id ||
@@ -279,137 +173,94 @@ const leadsSlice = createSlice({
         );
         
         if (leadIndex !== -1) {
-          if (context === 'personal') {
-            state.personal.leads[leadIndex] = {
-              ...state.personal.leads[leadIndex],
-              ...updatedLead
-            };
-          } else {
-            state.teams[context].leads[leadIndex] = {
-              ...state.teams[context].leads[leadIndex],
-              ...updatedLead
-            };
-          }
+          state.leads[leadIndex] = {
+            ...state.leads[leadIndex],
+            ...updatedLead
+          };
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Delete a lead by ID
-    // context: 'personal' or teamId string
     deleteLead: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const leadId = data;
-        if (context === 'personal') {
-          state.personal.leads = leads.filter(lead => 
-            lead.leadId !== leadId && lead.id !== leadId
-          );
-        } else {
-          state.teams[context].leads = leads.filter(lead => 
-            lead.leadId !== leadId && lead.id !== leadId
-          );
-        }
+        const leadId = action.payload.data;
+        state.leads = state.leads.filter(lead => 
+          lead.leadId !== leadId && lead.id !== leadId
+        );
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Move lead to different bucket
-    // context: 'personal' or teamId string
     moveLeadToBucket: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const { leadId, targetBucketId } = data;
-        const lead = leads.find(l => 
+        const { leadId, targetBucketId } = action.payload.data;
+        const lead = state.leads.find(l => 
           l.leadId === leadId || l.id === leadId
         );
         if (lead) {
           lead.bucketId = targetBucketId;
+          // Also update bucket_id if it exists for backward compatibility
           if (lead.bucket_id !== undefined) {
             lead.bucket_id = targetBucketId;
           }
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Clear all leads
-    // context: 'personal' or teamId string
     clearLeads: {
       reducer: (state, action) => {
-        const { context, broadcast } = action.payload;
-        
-        if (context === 'personal') {
-          state.personal.leads = [];
-          state.personal.error = null;
-          state.personal.lastFetched = null;
-        } else {
-          if (state.teams[context]) {
-            state.teams[context].leads = [];
-            state.teams[context].error = null;
-            state.teams[context].lastFetched = null;
-          }
-        }
+        // Always update local state (broadcast flag is only for middleware)
+        state.leads = [];
+        state.error = null;
+        state.lastFetched = null;
       },
-      prepare: (context = 'personal', broadcast = false) => ({
-        payload: { context, broadcast }
+      prepare: (data = null, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
     
     // Remove all leads from a specific bucket (when bucket is deleted)
-    // context: 'personal' or teamId string
     removeLeadsByBucketId: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
-        
-        if (context !== 'personal' && !state.teams[context]) {
+        // Always update local state (broadcast flag is only for middleware)
+        // Ensure leads is always an array
+        if (!Array.isArray(state.leads)) {
+          state.leads = [];
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
-        if (!Array.isArray(leads)) {
-          return;
-        }
-        
-        const bucketId = data;
-        if (context === 'personal') {
-          state.personal.leads = leads.filter(lead => 
-            lead.bucketId !== bucketId && lead.bucket_id !== bucketId
-          );
-        } else {
-          state.teams[context].leads = leads.filter(lead => 
-            lead.bucketId !== bucketId && lead.bucket_id !== bucketId
-          );
-        }
+        const bucketId = action.payload.data;
+        state.leads = state.leads.filter(lead => 
+          lead.bucketId !== bucketId && lead.bucket_id !== bucketId
+        );
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, broadcast = false) => ({
+        payload: { data, broadcast }
       })
     },
   },

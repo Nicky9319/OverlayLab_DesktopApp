@@ -8,7 +8,6 @@ import {
   updateBucket as updateBucketAction,
   deleteBucket as deleteBucketAction
 } from '../slices/bucketsSlice';
-import { removeLeadsByBucketId } from '../slices/leadsSlice';
 
 /**
  * Fetch all buckets from API and update Redux state
@@ -17,7 +16,7 @@ export const fetchBuckets = createAsyncThunk(
   'buckets/fetchBuckets',
   async (_, { dispatch, rejectWithValue }) => {
     try {
-      dispatch(setLoading(true, 'personal', true));
+      dispatch(setLoading(true));
       const buckets = await leadflowService.getAllBuckets();
       
       // Normalize buckets to match MongoDB schema (bucketId, bucketName)
@@ -27,12 +26,12 @@ export const fetchBuckets = createAsyncThunk(
         ...bucket // Preserve other fields
       }));
       
-      // Store in personal context - Broadcast to all windows (broadcast=true)
-      dispatch(setBuckets(normalizedBuckets, 'personal', true));
+      // Broadcast to all windows (broadcast=true) - this also updates local state now
+      dispatch(setBuckets(normalizedBuckets, true));
       return normalizedBuckets;
     } catch (error) {
       const errorMessage = error.message || 'Failed to fetch buckets';
-      dispatch(setError(errorMessage, 'personal', true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }
@@ -55,17 +54,17 @@ export const createBucket = createAsyncThunk(
           ...response.content
         };
         
-        // Store in personal context - Broadcast to all windows (broadcast=true)
-        dispatch(addBucketAction(normalizedBucket, 'personal', true));
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
+        dispatch(addBucketAction(normalizedBucket, true));
         return normalizedBucket;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create bucket';
-        dispatch(setError(errorMessage, 'personal', true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to create bucket';
-      dispatch(setError(errorMessage, 'personal', true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }
@@ -81,17 +80,17 @@ export const updateBucketName = createAsyncThunk(
       const response = await leadflowService.updateBucketName(bucketId, bucketName);
       
       if (response.status_code === 200) {
-        // Store in personal context - Broadcast to all windows (broadcast=true)
-        dispatch(updateBucketAction({ bucketId, bucketName }, 'personal', true));
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
+        dispatch(updateBucketAction({ bucketId, bucketName }, true));
         return { bucketId, bucketName };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update bucket';
-        dispatch(setError(errorMessage, 'personal', true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update bucket';
-      dispatch(setError(errorMessage, 'personal', true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }
@@ -107,18 +106,18 @@ export const removeBucket = createAsyncThunk(
       const response = await leadflowService.deleteBucket(bucketId);
       
       if (response.status_code === 200) {
-        // Store in personal context - Broadcast to all windows (broadcast=true)
-        dispatch(deleteBucketAction(bucketId, 'personal', true));
-        dispatch(removeLeadsByBucketId(bucketId, 'personal', true));
+        // Broadcast to all windows (broadcast=true) - this also updates local state now
+        dispatch(deleteBucketAction(bucketId, true));
+        dispatch(removeLeadsByBucketId(bucketId, true));
         return bucketId;
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete bucket';
-        dispatch(setError(errorMessage, 'personal', true));
+        dispatch(setError(errorMessage));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to delete bucket';
-      dispatch(setError(errorMessage, 'personal', true));
+      dispatch(setError(errorMessage));
       return rejectWithValue(errorMessage);
     }
   }

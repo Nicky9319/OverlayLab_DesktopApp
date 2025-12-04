@@ -16,15 +16,9 @@ const ActionBar = () => {
   const dispatch = useDispatch();
   const chatInterfaceVisible = useSelector((state) => state.uiVisibility.chatInterfaceVisible);
   const floatingWidgetPosition = useSelector((state) => state.floatingWidget.position);
+  const buckets = useSelector((state) => state.buckets?.buckets || []);
   const { viewMode, selectedTeamId } = useSelector((state) => state.teams || { viewMode: 'customer', selectedTeamId: null });
   const reduxTeams = useSelector((state) => state.teams?.teams || []);
-  
-  // Read buckets directly from Redux based on view mode - no filtering needed
-  const bucketsState = viewMode === 'team' && selectedTeamId
-    ? useSelector((state) => state.buckets?.teams[selectedTeamId] || { buckets: [], loading: false, error: null })
-    : useSelector((state) => state.buckets?.personal || { buckets: [], loading: false, error: null });
-  
-  const buckets = bucketsState.buckets || [];
   
   const [selectedOption, setSelectedOption] = useState('Select Option');
   const [selectedBucketId, setSelectedBucketId] = useState(null);
@@ -87,9 +81,7 @@ const ActionBar = () => {
       
       if (eventName === 'buckets-updated' && payload && Array.isArray(payload)) {
         console.log('ActionBar: Updating buckets with:', payload);
-        // Determine context based on current view mode
-        const context = localViewMode === 'team' && localSelectedTeamId ? localSelectedTeamId : 'personal';
-        dispatch(setBuckets(payload, context, true));
+        dispatch(setBuckets(payload));
       } else if (eventName === 'screenshot-image-captured' && payload) {
         console.log('ActionBar: Screenshot image captured event received!');
         handleScreenshotImageCaptured(payload);
@@ -720,14 +712,9 @@ const ActionBar = () => {
       if (localTeams.length === 0 && reduxTeams.length === 0) {
         loadTeams();
       } else if (reduxTeams.length > 0 && localTeams.length === 0) {
-        // Use Redux teams if available - filter out invalid teams
-        const validTeams = reduxTeams.filter(team => {
-          const teamId = team.teamId || team.id;
-          const teamName = team.teamName || team.name;
-          return teamId && teamName && teamName.trim() !== '';
-        });
-        setLocalTeams(validTeams);
-        localTeamsRef.current = validTeams;
+        // Use Redux teams if available
+        setLocalTeams(reduxTeams);
+        localTeamsRef.current = reduxTeams;
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -758,38 +745,28 @@ const ActionBar = () => {
   // Sync teams from Redux
   useEffect(() => {
     if (reduxTeams.length > 0 && localViewMode === 'team') {
-      // Filter out teams without valid names to prevent jitter
-      const validTeams = reduxTeams.filter(team => {
-        const teamId = team.teamId || team.id;
-        const teamName = team.teamName || team.name;
-        return teamId && teamName && teamName.trim() !== '';
-      });
-      
-      setLocalTeams(validTeams);
-      localTeamsRef.current = validTeams;
+      setLocalTeams(reduxTeams);
+      localTeamsRef.current = reduxTeams;
       
       // If we have a selected team ID but no local selection, find and select it
       if (selectedTeamId && !localSelectedTeamId) {
-        const team = validTeams.find(t => (t.teamId || t.id) === selectedTeamId);
+        const team = reduxTeams.find(t => (t.teamId || t.id) === selectedTeamId);
         if (team) {
-          const teamName = team.teamName || team.name;
-          if (teamName && teamName.trim() !== '') {
-            setLocalSelectedTeamId(selectedTeamId);
-            setSelectedTeamName(teamName);
-            const teamIndex = validTeams.findIndex(t => (t.teamId || t.id) === selectedTeamId);
-            if (teamIndex !== -1) {
-              setCurrentTeamIndex(teamIndex);
-              currentTeamIndexRef.current = teamIndex;
-            }
-            selectedTeamIdRef.current = selectedTeamId;
-            selectedTeamNameRef.current = teamName;
-            loadTeamBuckets(selectedTeamId);
+          const teamName = team.teamName || team.name || 'Unnamed Team';
+          setLocalSelectedTeamId(selectedTeamId);
+          setSelectedTeamName(teamName);
+          const teamIndex = reduxTeams.findIndex(t => (t.teamId || t.id) === selectedTeamId);
+          if (teamIndex !== -1) {
+            setCurrentTeamIndex(teamIndex);
+            currentTeamIndexRef.current = teamIndex;
           }
+          selectedTeamIdRef.current = selectedTeamId;
+          selectedTeamNameRef.current = teamName;
+          loadTeamBuckets(selectedTeamId);
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reduxTeams, localViewMode, selectedTeamId, localSelectedTeamId]);
+  }, [reduxTeams, localViewMode, selectedTeamId]);
 
   useEffect(() => {
     // Setup IPC listeners with retry logic
@@ -852,8 +829,19 @@ const ActionBar = () => {
   // Sync local bucket state with Redux state
   useEffect(() => {
     if (buckets && Array.isArray(buckets)) {
-      // Use buckets directly from Redux - already filtered by context
-      const filteredBuckets = buckets;
+      // Filter buckets based on view mode
+      let filteredBuckets = buckets;
+      if (localViewMode === 'team' && localSelectedTeamId) {
+        // Only show buckets for the selected team
+        filteredBuckets = buckets.filter(b => 
+          (b.teamId || b.team_id) === localSelectedTeamId
+        );
+      } else if (localViewMode === 'customer') {
+        // Only show personal buckets (no teamId)
+        filteredBuckets = buckets.filter(b => 
+          !b.teamId && !b.team_id
+        );
+      }
       
       console.log('ActionBar: Syncing local bucket state with Redux:', {
         allBuckets: buckets.length,
@@ -962,76 +950,60 @@ const ActionBar = () => {
     if (localTeams.length === 0) return;
     
     const newIndex = currentTeamIndex > 0 ? currentTeamIndex - 1 : localTeams.length - 1;
-    const selectedTeam = localTeams[newIndex];
-    
-    // Only proceed if team exists and has a valid name
-    if (!selectedTeam) return;
-    
-    const teamId = selectedTeam.teamId || selectedTeam.id;
-    const teamName = selectedTeam.teamName || selectedTeam.name;
-    
-    // Prevent jitter: Don't update if team name is missing or invalid
-    if (!teamId || !teamName || teamName.trim() === '') {
-      console.log('ActionBar: Skipping team switch - invalid team data:', { teamId, teamName });
-      return;
-    }
-    
     setCurrentTeamIndex(newIndex);
     currentTeamIndexRef.current = newIndex;
-    setLocalSelectedTeamId(teamId);
-    setSelectedTeamName(teamName);
-    selectedTeamIdRef.current = teamId;
-    selectedTeamNameRef.current = teamName;
     
-    // Update Redux state
-    dispatch(setSelectedTeamId(teamId));
-    
-    // Fetch team buckets
-    loadTeamBuckets(teamId);
-    
-    console.log('ActionBar: Previous team selected:', {
-      name: teamName,
-      id: teamId,
-      index: newIndex
-    });
+    const selectedTeam = localTeams[newIndex];
+    if (selectedTeam) {
+      const teamId = selectedTeam.teamId || selectedTeam.id;
+      const teamName = selectedTeam.teamName || selectedTeam.name || 'Unnamed Team';
+      setLocalSelectedTeamId(teamId);
+      setSelectedTeamName(teamName);
+      selectedTeamIdRef.current = teamId;
+      selectedTeamNameRef.current = teamName;
+      
+      // Update Redux state
+      dispatch(setSelectedTeamId(teamId));
+      
+      // Fetch team buckets
+      loadTeamBuckets(teamId);
+      
+      console.log('ActionBar: Previous team selected:', {
+        name: teamName,
+        id: teamId,
+        index: newIndex
+      });
+    }
   };
 
   const handleNextTeam = () => {
     if (localTeams.length === 0) return;
     
     const newIndex = currentTeamIndex < localTeams.length - 1 ? currentTeamIndex + 1 : 0;
-    const selectedTeam = localTeams[newIndex];
-    
-    // Only proceed if team exists and has a valid name
-    if (!selectedTeam) return;
-    
-    const teamId = selectedTeam.teamId || selectedTeam.id;
-    const teamName = selectedTeam.teamName || selectedTeam.name;
-    
-    // Prevent jitter: Don't update if team name is missing or invalid
-    if (!teamId || !teamName || teamName.trim() === '') {
-      console.log('ActionBar: Skipping team switch - invalid team data:', { teamId, teamName });
-      return;
-    }
-    
     setCurrentTeamIndex(newIndex);
     currentTeamIndexRef.current = newIndex;
-    setLocalSelectedTeamId(teamId);
-    setSelectedTeamName(teamName);
-    selectedTeamIdRef.current = teamId;
-    selectedTeamNameRef.current = teamName;
     
-    // Update Redux state
-    dispatch(setSelectedTeamId(teamId));
-    
-    // Fetch team buckets
-    loadTeamBuckets(teamId);
-    
-    console.log('ActionBar: Next team selected:', {
-      name: teamName,
-      id: teamId,
-      index: newIndex
-    });
+    const selectedTeam = localTeams[newIndex];
+    if (selectedTeam) {
+      const teamId = selectedTeam.teamId || selectedTeam.id;
+      const teamName = selectedTeam.teamName || selectedTeam.name || 'Unnamed Team';
+      setLocalSelectedTeamId(teamId);
+      setSelectedTeamName(teamName);
+      selectedTeamIdRef.current = teamId;
+      selectedTeamNameRef.current = teamName;
+      
+      // Update Redux state
+      dispatch(setSelectedTeamId(teamId));
+      
+      // Fetch team buckets
+      loadTeamBuckets(teamId);
+      
+      console.log('ActionBar: Next team selected:', {
+        name: teamName,
+        id: teamId,
+        index: newIndex
+      });
+    }
   };
 
   // Handle view mode toggle
@@ -1063,21 +1035,14 @@ const ActionBar = () => {
       const result = await dispatch(fetchAllTeams());
       if (fetchAllTeams.fulfilled.match(result)) {
         const teams = result.payload || [];
-        // Filter out teams without valid names to prevent jitter
-        const validTeams = teams.filter(team => {
-          const teamId = team.teamId || team.id;
-          const teamName = team.teamName || team.name;
-          return teamId && teamName && teamName.trim() !== '';
-        });
-        
-        setLocalTeams(validTeams);
-        localTeamsRef.current = validTeams;
+        setLocalTeams(teams);
+        localTeamsRef.current = teams;
         
         // Auto-select first team if available
-        if (validTeams.length > 0) {
-          const firstTeam = validTeams[0];
+        if (teams.length > 0) {
+          const firstTeam = teams[0];
           const teamId = firstTeam.teamId || firstTeam.id;
-          const teamName = firstTeam.teamName || firstTeam.name;
+          const teamName = firstTeam.teamName || firstTeam.name || 'Unnamed Team';
           setLocalSelectedTeamId(teamId);
           setSelectedTeamName(teamName);
           setCurrentTeamIndex(0);
@@ -1098,21 +1063,14 @@ const ActionBar = () => {
         
         const teams = await getAllTeams();
         if (Array.isArray(teams)) {
-          // Filter out teams without valid names to prevent jitter
-          const validTeams = teams.filter(team => {
-            const teamId = team.teamId || team.id;
-            const teamName = team.teamName || team.name;
-            return teamId && teamName && teamName.trim() !== '';
-          });
-          
-          setLocalTeams(validTeams);
-          localTeamsRef.current = validTeams;
+          setLocalTeams(teams);
+          localTeamsRef.current = teams;
           dispatch(fetchAllTeams()); // Update Redux
           
-          if (validTeams.length > 0) {
-            const firstTeam = validTeams[0];
+          if (teams.length > 0) {
+            const firstTeam = teams[0];
             const teamId = firstTeam.teamId || firstTeam.id;
-            const teamName = firstTeam.teamName || firstTeam.name;
+            const teamName = firstTeam.teamName || firstTeam.name || 'Unnamed Team';
             setLocalSelectedTeamId(teamId);
             setSelectedTeamName(teamName);
             setCurrentTeamIndex(0);
@@ -1159,7 +1117,7 @@ const ActionBar = () => {
             name: bucket.bucketName || bucket.name || bucket.bucket_name || ''
           }));
           
-          dispatch(setBuckets(normalizedBuckets, teamId, true));
+          dispatch(setBuckets(normalizedBuckets, true));
           dispatch(fetchTeamBuckets(teamId)); // Update Redux via thunk
         }
       }
@@ -1397,270 +1355,274 @@ const ActionBar = () => {
              display: 'flex',
              background: themeColors.surfaceBackground,
              borderRadius: '6px',
-             padding: '4px',
-             border: `1px solid ${themeColors.borderColor}`,
-             gap: '4px'
+             padding: '2px',
+             border: `1px solid ${themeColors.borderColor}`
            }}>
-            <button
-              onClick={() => handleViewModeToggle('customer')}
-              style={{
-                padding: '6px 10px',
-                fontSize: '11px',
-                fontWeight: '400',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: localViewMode === 'customer' ? themeColors.primaryBlue : 'transparent',
-                color: localViewMode === 'customer' ? '#FFFFFF' : themeColors.secondaryText,
-                transition: 'all 0.2s ease',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={(e) => {
-                if (localViewMode !== 'customer') {
-                  e.target.style.background = themeColors.hoverBackground;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (localViewMode !== 'customer') {
-                  e.target.style.background = 'transparent';
-                }
-              }}
-            >
-              Personal
-            </button>
-            <button
-              onClick={() => handleViewModeToggle('team')}
-              style={{
-                padding: '6px 12px',
-                fontSize: '11px',
-                fontWeight: '400',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                background: localViewMode === 'team' ? themeColors.primaryBlue : 'transparent',
-                color: localViewMode === 'team' ? '#FFFFFF' : themeColors.secondaryText,
-                transition: 'all 0.2s ease',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={(e) => {
-                if (localViewMode !== 'team') {
-                  e.target.style.background = themeColors.hoverBackground;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (localViewMode !== 'team') {
-                  e.target.style.background = 'transparent';
-                }
-              }}
-            >
-              Team
-            </button>
+             <button
+               onClick={() => handleViewModeToggle('customer')}
+               style={{
+                 padding: '4px 8px',
+                 fontSize: '10px',
+                 fontWeight: '600',
+                 borderRadius: '4px',
+                 border: 'none',
+                 cursor: 'pointer',
+                 background: localViewMode === 'customer' ? themeColors.primaryBlue : 'transparent',
+                 color: localViewMode === 'customer' ? '#FFFFFF' : themeColors.secondaryText,
+                 transition: 'all 0.2s ease',
+                 whiteSpace: 'nowrap'
+               }}
+               onMouseEnter={(e) => {
+                 if (localViewMode !== 'customer') {
+                   e.target.style.background = themeColors.hoverBackground;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localViewMode !== 'customer') {
+                   e.target.style.background = 'transparent';
+                 }
+               }}
+             >
+               Personal
+             </button>
+             <button
+               onClick={() => handleViewModeToggle('team')}
+               style={{
+                 padding: '4px 8px',
+                 fontSize: '10px',
+                 fontWeight: '600',
+                 borderRadius: '4px',
+                 border: 'none',
+                 cursor: 'pointer',
+                 background: localViewMode === 'team' ? themeColors.primaryBlue : 'transparent',
+                 color: localViewMode === 'team' ? '#FFFFFF' : themeColors.secondaryText,
+                 transition: 'all 0.2s ease',
+                 whiteSpace: 'nowrap'
+               }}
+               onMouseEnter={(e) => {
+                 if (localViewMode !== 'team') {
+                   e.target.style.background = themeColors.hoverBackground;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localViewMode !== 'team') {
+                   e.target.style.background = 'transparent';
+                 }
+               }}
+             >
+               Team
+             </button>
            </div>
 
-          {/* Team Selection (only visible in team mode and when teams are available) */}
-          {localViewMode === 'team' && localTeams.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {/* Team Label */}
-                <span style={{
-                  color: themeColors.secondaryText,
-                  fontSize: '10px',
-                  fontWeight: '400',
-                  whiteSpace: 'nowrap'
-                }}>
-                  Team:
-                </span>
-                
-                {/* Current Team Name Display */}
-                <div style={{
-                  background: themeColors.surfaceBackground,
-                  border: `1px solid ${themeColors.borderColor}`,
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                  color: themeColors.primaryText,
-                  fontSize: '10px',
-                  fontWeight: '400',
-                  textAlign: 'center',
-                  minWidth: '60px',
-                  maxWidth: '120px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {selectedTeamName || 'Select Team'}
-                </div>
+           {/* Team Selection (only visible in team mode and when teams are available) */}
+           {localViewMode === 'team' && localTeams.length > 0 && (
+             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+               {/* Previous Team Button */}
+               <button
+                 onClick={handlePreviousTeam}
+                 style={{
+                   background: themeColors.surfaceBackground,
+                   border: `1px solid ${themeColors.borderColor}`,
+                   borderRadius: '4px',
+                   padding: '4px 6px',
+                   color: themeColors.primaryText,
+                   fontSize: '10px',
+                   cursor: 'pointer',
+                   transition: 'all 0.2s ease',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   minWidth: '24px'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }}
+                 onMouseLeave={(e) => {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }}
+                 title="Previous team"
+               >
+                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                   <polyline points="15,18 9,12 15,6"></polyline>
+                 </svg>
+               </button>
 
-                {/* Team Counter Display */}
-                <div style={{
-                  background: themeColors.surfaceBackground,
-                  border: `1px solid ${themeColors.borderColor}`,
-                  borderRadius: '4px',
-                  padding: '4px 6px',
-                  color: themeColors.secondaryText,
-                  fontSize: '8px',
-                  fontWeight: '500',
-                  textAlign: 'center',
-                  minWidth: '35px'
-                }}>
-                  {`${currentTeamIndex + 1}/${localTeams.length}`}
-                </div>
-              </div>
-              
-              {/* Navigation Buttons Below */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                <button
-                  onClick={handlePreviousTeam}
-                  style={{
-                    background: themeColors.surfaceBackground,
-                    border: `1px solid ${themeColors.borderColor}`,
-                    borderRadius: '3px',
-                    padding: '2px 6px',
-                    color: themeColors.primaryText,
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '18px',
-                    minWidth: '40px',
-                    fontWeight: '500'
-                  }}
-                  title="Previous team"
-                >
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="15,18 9,12 15,6"></polyline>
-                  </svg>
-                </button>
-                <button
-                  onClick={handleNextTeam}
-                  style={{
-                    background: themeColors.surfaceBackground,
-                    border: `1px solid ${themeColors.borderColor}`,
-                    borderRadius: '3px',
-                    padding: '2px 6px',
-                    color: themeColors.primaryText,
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '18px',
-                    minWidth: '40px',
-                    fontWeight: '500'
-                  }}
-                  title="Next team"
-                >
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9,18 15,12 9,6"></polyline>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
+               {/* Current Team Name Display - Dynamic width to fit full name */}
+               <div style={{
+                 background: themeColors.surfaceBackground,
+                 border: `1px solid ${themeColors.borderColor}`,
+                 borderRadius: '6px',
+                 padding: '6px 10px',
+                 color: themeColors.primaryText,
+                 fontSize: '11px',
+                 fontWeight: '600',
+                 textAlign: 'center',
+                 minWidth: '60px',
+                 whiteSpace: 'nowrap'
+               }}>
+                 {selectedTeamName}
+               </div>
 
-          {/* Bucket Navigation */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Bucket Label */}
-              <span style={{
-                color: themeColors.secondaryText,
-                fontSize: '10px',
-                fontWeight: '500',
-                whiteSpace: 'nowrap'
-              }}>
-                Bucket:
-              </span>
-              
-              {/* Current Bucket Name Display */}
-              <div style={{
-                background: localBuckets.length === 0 ? '#6B7280' : themeColors.surfaceBackground,
-                border: `1px solid ${localBuckets.length === 0 ? '#6B7280' : themeColors.borderColor}`,
-                borderRadius: '4px',
-                padding: '4px 8px',
-                color: localBuckets.length === 0 ? '#9CA3AF' : themeColors.primaryText,
-                fontSize: '10px',
-                fontWeight: '400',
-                textAlign: 'center',
-                minWidth: '60px',
-                maxWidth: '120px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                opacity: localBuckets.length === 0 ? 0.5 : 1
-              }}>
-                {selectedOption}
-              </div>
+               {/* Next Team Button */}
+               <button
+                 onClick={handleNextTeam}
+                 style={{
+                   background: themeColors.surfaceBackground,
+                   border: `1px solid ${themeColors.borderColor}`,
+                   borderRadius: '4px',
+                   padding: '4px 6px',
+                   color: themeColors.primaryText,
+                   fontSize: '10px',
+                   cursor: 'pointer',
+                   transition: 'all 0.2s ease',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   minWidth: '24px'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }}
+                 onMouseLeave={(e) => {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }}
+                 title="Next team"
+               >
+                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                   <polyline points="9,18 15,12 9,6"></polyline>
+                 </svg>
+               </button>
 
-              {/* Counter Display */}
-              <div style={{
-                background: themeColors.surfaceBackground,
-                border: `1px solid ${themeColors.borderColor}`,
-                borderRadius: '4px',
-                padding: '4px 6px',
-                color: themeColors.secondaryText,
-                fontSize: '8px',
-                fontWeight: '500',
-                textAlign: 'center',
-                minWidth: '35px'
-              }}>
-                {localBuckets.length > 0 ? `${currentBucketIndex + 1}/${localBuckets.length}` : '0/0'}
-              </div>
-            </div>
-            
-            {/* Navigation Buttons Below */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-              <button
-                onClick={handlePreviousBucket}
-                disabled={localBuckets.length === 0}
-                style={{
-                  background: localBuckets.length === 0 ? '#6B7280' : themeColors.surfaceBackground,
-                  border: `1px solid ${localBuckets.length === 0 ? '#6B7280' : themeColors.borderColor}`,
-                  borderRadius: '3px',
-                  padding: '2px 6px',
-                  color: localBuckets.length === 0 ? '#9CA3AF' : themeColors.primaryText,
-                  fontSize: '11px',
-                  cursor: localBuckets.length === 0 ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '18px',
-                  minWidth: '40px',
-                  fontWeight: '500',
-                  opacity: localBuckets.length === 0 ? 0.5 : 1
-                }}
-                title="Previous bucket"
-              >
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15,18 9,12 15,6"></polyline>
-                </svg>
-              </button>
-              <button
-                onClick={handleNextBucket}
-                disabled={localBuckets.length === 0}
-                style={{
-                  background: localBuckets.length === 0 ? '#6B7280' : themeColors.surfaceBackground,
-                  border: `1px solid ${localBuckets.length === 0 ? '#6B7280' : themeColors.borderColor}`,
-                  borderRadius: '3px',
-                  padding: '2px 6px',
-                  color: localBuckets.length === 0 ? '#9CA3AF' : themeColors.primaryText,
-                  fontSize: '11px',
-                  cursor: localBuckets.length === 0 ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '18px',
-                  minWidth: '40px',
-                  fontWeight: '500',
-                  opacity: localBuckets.length === 0 ? 0.5 : 1
-                }}
-                title="Next bucket"
-              >
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9,18 15,12 9,6"></polyline>
-                </svg>
-              </button>
-            </div>
-          </div>
+               {/* Team Counter Display */}
+               <div style={{
+                 background: themeColors.surfaceBackground,
+                 border: `1px solid ${themeColors.borderColor}`,
+                 borderRadius: '6px',
+                 padding: '6px 8px',
+                 color: themeColors.secondaryText,
+                 fontSize: '10px',
+                 fontWeight: '500',
+                 textAlign: 'center',
+                 minWidth: '40px'
+               }}>
+                 {`${currentTeamIndex + 1}/${localTeams.length}`}
+               </div>
+             </div>
+           )}
+
+           {/* Bucket Navigation */}
+           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+             {/* Previous Button */}
+             <button
+               onClick={handlePreviousBucket}
+               disabled={localBuckets.length === 0}
+               style={{
+                 background: localBuckets.length === 0 ? '#6B7280' : themeColors.surfaceBackground,
+                 border: `1px solid ${localBuckets.length === 0 ? '#6B7280' : themeColors.borderColor}`,
+                 borderRadius: '4px',
+                 padding: '4px 6px',
+                 color: localBuckets.length === 0 ? '#9CA3AF' : themeColors.primaryText,
+                 fontSize: '10px',
+                 cursor: localBuckets.length === 0 ? 'not-allowed' : 'pointer',
+                 transition: 'all 0.2s ease',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 minWidth: '24px',
+                 opacity: localBuckets.length === 0 ? 0.5 : 1
+               }}
+               onMouseEnter={(e) => {
+                 if (localBuckets.length > 0) {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localBuckets.length > 0) {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }
+               }}
+               title="Previous bucket"
+             >
+               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <polyline points="15,18 9,12 15,6"></polyline>
+               </svg>
+             </button>
+
+             {/* Current Bucket Name Display - Dynamic width to fit full name */}
+             <div style={{
+               background: themeColors.surfaceBackground,
+               border: `1px solid ${themeColors.borderColor}`,
+               borderRadius: '6px',
+               padding: '6px 10px',
+               color: themeColors.primaryText,
+               fontSize: '11px',
+               fontWeight: '600',
+               textAlign: 'center',
+               minWidth: '60px',
+               whiteSpace: 'nowrap'
+             }}>
+               {selectedOption}
+             </div>
+
+             {/* Next Button */}
+             <button
+               onClick={handleNextBucket}
+               disabled={localBuckets.length === 0}
+               style={{
+                 background: localBuckets.length === 0 ? '#6B7280' : themeColors.surfaceBackground,
+                 border: `1px solid ${localBuckets.length === 0 ? '#6B7280' : themeColors.borderColor}`,
+                 borderRadius: '4px',
+                 padding: '4px 6px',
+                 color: localBuckets.length === 0 ? '#9CA3AF' : themeColors.primaryText,
+                 fontSize: '10px',
+                 cursor: localBuckets.length === 0 ? 'not-allowed' : 'pointer',
+                 transition: 'all 0.2s ease',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 minWidth: '24px',
+                 opacity: localBuckets.length === 0 ? 0.5 : 1
+               }}
+               onMouseEnter={(e) => {
+                 if (localBuckets.length > 0) {
+                   e.target.style.background = themeColors.hoverBackground;
+                   e.target.style.borderColor = themeColors.primaryBlue;
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (localBuckets.length > 0) {
+                   e.target.style.background = themeColors.surfaceBackground;
+                   e.target.style.borderColor = themeColors.borderColor;
+                 }
+               }}
+               title="Next bucket"
+             >
+               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <polyline points="9,18 15,12 9,6"></polyline>
+               </svg>
+             </button>
+
+             {/* Counter Display - After the navigation buttons */}
+             <div style={{
+               background: themeColors.surfaceBackground,
+               border: `1px solid ${themeColors.borderColor}`,
+               borderRadius: '6px',
+               padding: '6px 8px',
+               color: themeColors.secondaryText,
+               fontSize: '10px',
+               fontWeight: '500',
+               textAlign: 'center',
+               minWidth: '40px'
+             }}>
+               {localBuckets.length > 0 ? `${currentBucketIndex + 1}/${localBuckets.length}` : '0/0'}
+             </div>
+           </div>
 
           {/* Action Button with Status Indicator */}
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
