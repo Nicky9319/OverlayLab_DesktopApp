@@ -14,8 +14,8 @@ const Buckets = () => {
     
     // Read directly from Redux state based on view mode - no filtering needed
     const bucketsState = teamViewMode === 'team' && selectedTeamId
-        ? useSelector((state) => state.buckets.teams[selectedTeamId] || { buckets: [], loading: false, error: null })
-        : useSelector((state) => state.buckets.personal);
+        ? useSelector((state) => state.buckets?.teams?.[selectedTeamId] || { buckets: [], loading: false, error: null })
+        : useSelector((state) => state.buckets?.personal || { buckets: [], loading: false, error: null });
     
     const { buckets, loading, error } = bucketsState;
     

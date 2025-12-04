@@ -11,35 +11,58 @@ import { createSlice } from '@reduxjs/toolkit';
 const bucketsSlice = createSlice({
   name: 'buckets',
   initialState: {
-    buckets: [], // Array of { bucketId: string, bucketName: string }
-    loading: false,
-    error: null,
-    lastFetched: null, // Timestamp of last successful fetch
+    personal: {
+      buckets: [], // Array of { bucketId: string, bucketName: string }
+      loading: false,
+      error: null,
+      lastFetched: null, // Timestamp of last successful fetch
+    },
+    teams: {}, // Object keyed by teamId: { buckets: [], loading: false, error: null, lastFetched: null }
   },
   reducers: {
     // Set all buckets (used after fetching from API)
+    // context: 'personal' or teamId string
     setBuckets: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware to decide whether to broadcast)
-        // Ensure we always set an array, even if data is undefined/null
-        const bucketsData = Array.isArray(action.payload.data) ? action.payload.data : [];
+        const { data, context, broadcast } = action.payload;
+        const bucketsData = Array.isArray(data) ? data : [];
+        
+        // Initialize team state if it doesn't exist
+        if (context !== 'personal' && !state.teams[context]) {
+          state.teams[context] = {
+            buckets: [],
+            loading: false,
+            error: null,
+            lastFetched: null,
+          };
+        }
         
         console.log('bucketsSlice.setBuckets: Updating state', {
-          receivedCount: Array.isArray(action.payload.data) ? action.payload.data.length : 0,
-          isArray: Array.isArray(action.payload.data),
-          sampleBucket: Array.isArray(action.payload.data) && action.payload.data.length > 0 ? action.payload.data[0] : null,
-          currentCount: state.buckets.length,
-          broadcast: action.payload.broadcast
+          context,
+          receivedCount: Array.isArray(data) ? data.length : 0,
+          isArray: Array.isArray(data),
+          sampleBucket: Array.isArray(data) && data.length > 0 ? data[0] : null,
+          currentCount: context === 'personal' ? state.personal.buckets.length : (state.teams[context]?.buckets?.length || 0),
+          broadcast
         });
         
-        state.buckets = bucketsData;
-        state.loading = false;
-        state.error = null;
-        state.lastFetched = Date.now();
+        // Update the target state
+        if (context === 'personal') {
+          state.personal.buckets = bucketsData;
+          state.personal.loading = false;
+          state.personal.error = null;
+          state.personal.lastFetched = Date.now();
+        } else {
+          state.teams[context].buckets = bucketsData;
+          state.teams[context].loading = false;
+          state.teams[context].error = null;
+          state.teams[context].lastFetched = Date.now();
+        }
         
         console.log('bucketsSlice.setBuckets: State updated', {
-          newCount: state.buckets.length,
-          buckets: state.buckets.map(b => ({
+          context,
+          newCount: context === 'personal' ? state.personal.buckets.length : state.teams[context].buckets.length,
+          buckets: (context === 'personal' ? state.personal.buckets : state.teams[context].buckets).map(b => ({
             bucketId: b.bucketId || b.id,
             bucketName: b.bucketName || b.name,
             teamId: b.teamId || b.team_id,
@@ -47,53 +70,93 @@ const bucketsSlice = createSlice({
           }))
         });
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Set loading state
+    // context: 'personal' or teamId string
     setLoading: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        state.loading = action.payload.data;
-        if (action.payload.data) {
-          state.error = null; // Clear error when starting to load
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          state.teams[context] = {
+            buckets: [],
+            loading: false,
+            error: null,
+            lastFetched: null,
+          };
+        }
+        
+        if (context === 'personal') {
+          state.personal.loading = data;
+          if (data) {
+            state.personal.error = null;
+          }
+        } else {
+          state.teams[context].loading = data;
+          if (data) {
+            state.teams[context].error = null;
+          }
         }
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Set error state
+    // context: 'personal' or teamId string
     setError: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        state.error = action.payload.data;
-        state.loading = false;
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          state.teams[context] = {
+            buckets: [],
+            loading: false,
+            error: null,
+            lastFetched: null,
+          };
+        }
+        
+        if (context === 'personal') {
+          state.personal.error = data;
+          state.personal.loading = false;
+        } else {
+          state.teams[context].error = data;
+          state.teams[context].loading = false;
+        }
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Update bucket name (supports both id/bucketId and name/bucketName)
+    // context: 'personal' or teamId string
     updateBucket: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        // Ensure buckets is always an array
-        if (!Array.isArray(state.buckets)) {
-          state.buckets = [];
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          return;
         }
         
-        const { id, bucketId, name, bucketName } = action.payload.data;
+        const buckets = context === 'personal' ? state.personal.buckets : state.teams[context].buckets;
+        if (!Array.isArray(buckets)) {
+          return;
+        }
+        
+        const { id, bucketId, name, bucketName } = data;
         const targetId = id || bucketId;
         const newName = name || bucketName;
         
         if (!targetId || !newName) return;
         
-        const bucket = state.buckets.find(b => 
+        const bucket = buckets.find(b => 
           b.bucketId === targetId || b.id === targetId
         );
         if (bucket) {
@@ -104,71 +167,109 @@ const bucketsSlice = createSlice({
           }
         }
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Add a new bucket
+    // context: 'personal' or teamId string
     addBucket: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        // Ensure buckets is always an array
-        if (!Array.isArray(state.buckets)) {
-          state.buckets = [];
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          state.teams[context] = {
+            buckets: [],
+            loading: false,
+            error: null,
+            lastFetched: null,
+          };
         }
         
-        const bucket = action.payload.data;
+        const buckets = context === 'personal' ? state.personal.buckets : state.teams[context].buckets;
+        if (!Array.isArray(buckets)) {
+          if (context === 'personal') {
+            state.personal.buckets = [];
+          } else {
+            state.teams[context].buckets = [];
+          }
+        }
+        
+        const bucket = data;
         // Normalize to ensure bucketId and bucketName exist
         const normalizedBucket = {
           bucketId: bucket.bucketId || bucket.id,
           bucketName: bucket.bucketName || bucket.name,
           ...bucket
         };
+        
+        const targetBuckets = context === 'personal' ? state.personal.buckets : state.teams[context].buckets;
         // Check if bucket already exists
-        const exists = state.buckets.some(b => 
+        const exists = targetBuckets.some(b => 
           b.bucketId === normalizedBucket.bucketId || 
           (b.id && b.id === normalizedBucket.bucketId)
         );
         if (!exists) {
-          state.buckets.push(normalizedBucket);
+          targetBuckets.push(normalizedBucket);
         }
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Delete a bucket by ID
+    // context: 'personal' or teamId string
     deleteBucket: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        // Ensure buckets is always an array
-        if (!Array.isArray(state.buckets)) {
-          state.buckets = [];
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
           return;
         }
         
-        const bucketId = action.payload.data;
-        state.buckets = state.buckets.filter(bucket => 
-          bucket.bucketId !== bucketId && bucket.id !== bucketId
-        );
+        const buckets = context === 'personal' ? state.personal.buckets : state.teams[context].buckets;
+        if (!Array.isArray(buckets)) {
+          return;
+        }
+        
+        const bucketId = data;
+        if (context === 'personal') {
+          state.personal.buckets = buckets.filter(bucket => 
+            bucket.bucketId !== bucketId && bucket.id !== bucketId
+          );
+        } else {
+          state.teams[context].buckets = buckets.filter(bucket => 
+            bucket.bucketId !== bucketId && bucket.id !== bucketId
+          );
+        }
       },
-      prepare: (data, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
       })
     },
     
     // Clear all buckets
+    // context: 'personal' or teamId string
     clearBuckets: {
       reducer: (state, action) => {
-        // Always update local state (broadcast flag is only for middleware)
-        state.buckets = [];
-        state.error = null;
-        state.lastFetched = null;
+        const { context, broadcast } = action.payload;
+        
+        if (context === 'personal') {
+          state.personal.buckets = [];
+          state.personal.error = null;
+          state.personal.lastFetched = null;
+        } else {
+          if (state.teams[context]) {
+            state.teams[context].buckets = [];
+            state.teams[context].error = null;
+            state.teams[context].lastFetched = null;
+          }
+        }
       },
-      prepare: (data = null, broadcast = false) => ({
-        payload: { data, broadcast }
+      prepare: (context = 'personal', broadcast = false) => ({
+        payload: { context, broadcast }
       })
     },
   },
