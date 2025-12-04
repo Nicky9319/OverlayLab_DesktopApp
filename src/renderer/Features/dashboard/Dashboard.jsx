@@ -12,6 +12,8 @@ const Dashboard = () => {
     const [currentView, setCurrentView] = useState('leadflow'); // 'leadflow', 'airtype', 'clipvault', or 'settings'
     const [isRecorded, setIsRecorded] = useState(false);
     const [originalIsRecorded, setOriginalIsRecorded] = useState(false);
+    const [airtypeAutoPaste, setAirtypeAutoPaste] = useState(false);
+    const [originalAirtypeAutoPaste, setOriginalAirtypeAutoPaste] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
     const [showComingSoon, setShowComingSoon] = useState(false);
     const [comingSoonFeature, setComingSoonFeature] = useState(null); // 'airtype' or 'clipvault'
@@ -25,8 +27,13 @@ const Dashboard = () => {
                     setIsRecorded(value);
                     setOriginalIsRecorded(value);
                 }
+                if (window.electronAPI && window.electronAPI.getAirtypeAutoPaste) {
+                    const value = await window.electronAPI.getAirtypeAutoPaste();
+                    setAirtypeAutoPaste(value);
+                    setOriginalAirtypeAutoPaste(value);
+                }
             } catch (error) {
-                console.error('Failed to load overlay recordable setting:', error);
+                console.error('Failed to load settings:', error);
             }
         };
         loadSettings();
@@ -34,8 +41,11 @@ const Dashboard = () => {
 
     // Check for unsaved changes
     useEffect(() => {
-        setHasUnsavedChanges(isRecorded !== originalIsRecorded);
-    }, [isRecorded, originalIsRecorded]);
+        setHasUnsavedChanges(
+            isRecorded !== originalIsRecorded || 
+            airtypeAutoPaste !== originalAirtypeAutoPaste
+        );
+    }, [isRecorded, originalIsRecorded, airtypeAutoPaste, originalAirtypeAutoPaste]);
 
     const handleLeadflowClick = () => {
         navigate('/leadflow');
@@ -76,15 +86,23 @@ const Dashboard = () => {
         setIsRecorded(e.target.checked);
     };
 
+    const handleAirtypeAutoPasteToggle = (e) => {
+        setAirtypeAutoPaste(e.target.checked);
+    };
+
     const handleSave = async () => {
         try {
             if (window.electronAPI && window.electronAPI.setOverlayRecordable) {
                 await window.electronAPI.setOverlayRecordable(isRecorded);
                 setOriginalIsRecorded(isRecorded);
-                setHasUnsavedChanges(false);
             }
+            if (window.electronAPI && window.electronAPI.setAirtypeAutoPaste) {
+                await window.electronAPI.setAirtypeAutoPaste(airtypeAutoPaste);
+                setOriginalAirtypeAutoPaste(airtypeAutoPaste);
+            }
+            setHasUnsavedChanges(false);
         } catch (error) {
-            console.error('Failed to save overlay recordable setting:', error);
+            console.error('Failed to save settings:', error);
         }
     };
 
@@ -93,12 +111,16 @@ const Dashboard = () => {
             if (window.electronAPI && window.electronAPI.setOverlayRecordable) {
                 await window.electronAPI.setOverlayRecordable(isRecorded);
                 setOriginalIsRecorded(isRecorded);
-                setHasUnsavedChanges(false);
-                
-                // Restart the app
-                if (window.electronAPI.restartApp) {
-                    await window.electronAPI.restartApp();
-                }
+            }
+            if (window.electronAPI && window.electronAPI.setAirtypeAutoPaste) {
+                await window.electronAPI.setAirtypeAutoPaste(airtypeAutoPaste);
+                setOriginalAirtypeAutoPaste(airtypeAutoPaste);
+            }
+            setHasUnsavedChanges(false);
+            
+            // Restart the app
+            if (window.electronAPI.restartApp) {
+                await window.electronAPI.restartApp();
             }
         } catch (error) {
             console.error('Failed to save and restart:', error);
@@ -401,6 +423,80 @@ const Dashboard = () => {
                                     transition: '0.3s',
                                     borderRadius: '50%',
                                     transform: isRecorded ? 'translateX(20px)' : 'translateX(0)'
+                                }} />
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                {/* AirType Auto-Paste Setting */}
+                <div style={{
+                    backgroundColor: '#1C1C1E',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    marginBottom: '24px'
+                }}>
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '12px'
+                    }}>
+                        <div>
+                            <h3 style={{
+                                fontSize: '18px',
+                                fontWeight: '600',
+                                color: '#FFFFFF',
+                                marginBottom: '4px'
+                            }}>
+                                AirType Auto-Paste
+                            </h3>
+                            <p style={{
+                                fontSize: '14px',
+                                color: '#8E8E93',
+                                margin: 0
+                            }}>
+                                When enabled, transcribed text will automatically paste at cursor position. The text modal and copy button will be hidden.
+                            </p>
+                        </div>
+                        <label style={{
+                            position: 'relative',
+                            display: 'inline-block',
+                            width: '52px',
+                            height: '32px'
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={airtypeAutoPaste}
+                                onChange={handleAirtypeAutoPasteToggle}
+                                style={{
+                                    opacity: 0,
+                                    width: 0,
+                                    height: 0
+                                }}
+                            />
+                            <span style={{
+                                position: 'absolute',
+                                cursor: 'pointer',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                backgroundColor: airtypeAutoPaste ? '#007AFF' : '#2D2D2F',
+                                transition: '0.3s',
+                                borderRadius: '16px'
+                            }}>
+                                <span style={{
+                                    position: 'absolute',
+                                    content: '""',
+                                    height: '24px',
+                                    width: '24px',
+                                    left: '4px',
+                                    bottom: '4px',
+                                    backgroundColor: '#FFFFFF',
+                                    transition: '0.3s',
+                                    borderRadius: '50%',
+                                    transform: airtypeAutoPaste ? 'translateX(20px)' : 'translateX(0)'
                                 }} />
                             </span>
                         </label>

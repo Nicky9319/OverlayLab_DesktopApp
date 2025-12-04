@@ -1,6 +1,6 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session, clipboard } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
@@ -1320,6 +1320,24 @@ ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
   return { success: true };
 });
 
+// AirType auto-paste setting IPC handlers
+ipcMain.handle('settings:getAirtypeAutoPaste', (event) => {
+  if (store) {
+    const value = store.get('airtypeAutoPaste', true); // Default to true
+    return value;
+  }
+  return true; // Default to true
+});
+
+ipcMain.handle('settings:setAirtypeAutoPaste', (event, value) => {
+  if (store) {
+    store.set('airtypeAutoPaste', value);
+    logger.info('Updated airtypeAutoPaste setting', { airtypeAutoPaste: value });
+    return { success: true };
+  }
+  return { success: false, error: 'Store not available' };
+});
+
 // Overlay selector IPC handlers
 ipcMain.handle('overlay:openSelector', (event) => {
   logger.debug('Overlay selector open requested');
@@ -1353,6 +1371,109 @@ ipcMain.handle('overlay:getOverlayType', (event) => {
     return { success: true, overlayType };
   }
   return { success: false, overlayType: 'leadflow' };
+});
+
+// AirType paste text handler
+ipcMain.handle('airtype:pasteText', async (event, text) => {
+  console.log('========================================');
+  console.log('[AirType] Paste event triggered in main process');
+  console.log(`[AirType] Text length: ${text?.length || 0} characters`);
+  console.log(`[AirType] Text preview: ${text?.substring(0, 50)}${text?.length > 50 ? '...' : ''}`);
+  console.log('========================================');
+  
+  logger.info('AirType paste text requested', { textLength: text?.length });
+  
+  if (!text || typeof text !== 'string') {
+    console.error('[AirType] ERROR: Invalid text provided for paste');
+    logger.warn('Invalid text provided for paste');
+    return { success: false, error: 'Invalid text provided' };
+  }
+  
+  try {
+    // Step 1: Set clipboard content
+    console.log('[AirType] Step 1: Setting text to clipboard...');
+    clipboard.writeText(text);
+    logger.debug('Text set to clipboard');
+    console.log('[AirType] ✓ Text set to clipboard successfully');
+    
+    // Step 2: Simulate paste keystroke
+    console.log('[AirType] Step 2: Simulating paste keystroke...');
+    const platform = process.platform;
+    console.log(`[AirType] Platform detected: ${platform}`);
+    
+    // Use promises to ensure paste completes before returning
+    await new Promise((resolve, reject) => {
+      const { exec } = require('child_process');
+      
+      if (platform === 'win32') {
+        // Windows: Use PowerShell to send Ctrl+V
+        console.log('[AirType] Using Windows PowerShell method...');
+        exec('powershell -command "$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys(\'^v\')"', (error) => {
+          if (error) {
+            console.error('[AirType] Failed to simulate paste on Windows:', error.message);
+            logger.warn('Failed to simulate paste on Windows, clipboard is set', error);
+            reject(error);
+          } else {
+            console.log('[AirType] ✓ Paste simulated on Windows successfully');
+            logger.debug('Paste simulated on Windows');
+            resolve();
+          }
+        });
+      } else if (platform === 'darwin') {
+        // macOS: Use AppleScript to send Cmd+V
+        console.log('[AirType] Using macOS AppleScript method...');
+        exec('osascript -e "tell application \\"System Events\\" to keystroke \\"v\\" using command down"', (error) => {
+          if (error) {
+            console.error('[AirType] Failed to simulate paste on macOS:', error.message);
+            logger.warn('Failed to simulate paste on macOS, clipboard is set', error);
+            reject(error);
+          } else {
+            console.log('[AirType] ✓ Paste simulated on macOS successfully');
+            logger.debug('Paste simulated on macOS');
+            resolve();
+          }
+        });
+      } else if (platform === 'linux') {
+        // Linux: Use xdotool if available, otherwise just set clipboard
+        console.log('[AirType] Using Linux xdotool method...');
+        exec('which xdotool', (checkError) => {
+          if (checkError) {
+            console.warn('[AirType] xdotool not available on Linux, clipboard is set but paste not simulated');
+            logger.warn('xdotool not available on Linux, clipboard is set');
+            resolve(); // Resolve anyway since clipboard is set
+          } else {
+            exec('xdotool key ctrl+v', (err) => {
+              if (err) {
+                console.error('[AirType] Failed to simulate paste on Linux:', err.message);
+                logger.warn('Failed to simulate paste on Linux, clipboard is set', err);
+                reject(err);
+              } else {
+                console.log('[AirType] ✓ Paste simulated on Linux successfully');
+                logger.debug('Paste simulated on Linux');
+                resolve();
+              }
+            });
+          }
+        });
+      } else {
+        console.warn(`[AirType] Unsupported platform: ${platform}, clipboard is set but paste not simulated`);
+        resolve(); // Resolve anyway since clipboard is set
+      }
+    });
+    
+    console.log('========================================');
+    console.log('[AirType] ✓ Paste operation completed successfully');
+    console.log('========================================');
+    logger.info('AirType paste operation completed', { textLength: text.length });
+    
+    return { success: true, message: 'Text pasted at cursor position' };
+  } catch (error) {
+    console.error('========================================');
+    console.error('[AirType] ✗ ERROR during paste operation:', error.message);
+    console.error('========================================');
+    logger.error('Error pasting text', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('settings:restartApp', () => {
@@ -3599,8 +3720,33 @@ app.whenReady().then(async () => {
     }
   });
 
-  // Screenshot shortcut (Ctrl + 1)
+  // Screenshot/Voice Recording shortcut (Ctrl + 1)
   globalShortcut.register('CommandOrControl+1', () => {
+    logger.debug('Ctrl+1 shortcut pressed');
+    
+    // Check current overlay type from store
+    let currentOverlayType = 'leadflow'; // default
+    if (store) {
+      currentOverlayType = store.get('selectedOverlayType', 'leadflow');
+    }
+    
+    // If AirType overlay is active, handle voice recording
+    if (currentOverlayType === 'airtype') {
+      logger.debug('AirType overlay active, sending recording toggle event');
+      if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+        try {
+          widgetWindow.window.webContents.send('eventFromMain', {
+            eventName: 'airtype:toggleRecording',
+            payload: { timestamp: Date.now() }
+          });
+        } catch (sendError) {
+          logger.warn('Failed to send recording toggle event:', sendError);
+        }
+      }
+      return;
+    }
+    
+    // Otherwise, handle screenshot (original functionality)
     logger.debug('Screenshot shortcut Ctrl+1 pressed');
     
     const now = Date.now();
