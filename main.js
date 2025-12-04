@@ -1323,10 +1323,10 @@ ipcMain.handle('settings:setOverlayRecordable', (event, value) => {
 // AirType auto-paste setting IPC handlers
 ipcMain.handle('settings:getAirtypeAutoPaste', (event) => {
   if (store) {
-    const value = store.get('airtypeAutoPaste', false);
+    const value = store.get('airtypeAutoPaste', true); // Default to true
     return value;
   }
-  return false;
+  return true; // Default to true
 });
 
 ipcMain.handle('settings:setAirtypeAutoPaste', (event, value) => {

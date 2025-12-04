@@ -378,11 +378,12 @@ const AirtypeOverlay = () => {
 
   // Drag functionality
   const handleMouseDown = (e) => {
-    // Only start dragging if clicking on the widget background, not on buttons
-    if (e.target.closest('button') || e.target.closest('svg')) {
+    // Only prevent dragging if clicking on buttons or links
+    if (e.target.closest('button') || e.target.closest('a') || e.target.closest('[role="button"]')) {
       return;
     }
     
+    // Allow dragging from anywhere on the widget (including the mic icon area)
     setIsDragging(true);
     const rect = widgetRef.current?.getBoundingClientRect();
     if (rect) {
@@ -391,6 +392,7 @@ const AirtypeOverlay = () => {
         y: e.clientY - rect.top
       });
     }
+    e.preventDefault(); // Prevent text selection while dragging
   };
 
   const handleMouseMove = (e) => {
@@ -451,7 +453,7 @@ const AirtypeOverlay = () => {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000,
-          cursor: isDragging ? 'grabbing' : 'default',
+          cursor: isDragging ? 'grabbing' : 'grab',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
           pointerEvents: 'auto',
           transition: 'all 0.3s ease',
@@ -494,37 +496,116 @@ const AirtypeOverlay = () => {
         </button>
       )}
 
-      {/* Auto-paste indicator badge */}
-      {autoPasteEnabled && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '-8px',
-            right: '-8px',
-            width: '20px',
-            height: '20px',
-            borderRadius: '50%',
-            backgroundColor: themeColors.primaryBlue,
-            border: `2px solid ${themeColors.primaryBackground}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1001,
-            boxShadow: '0 2px 8px rgba(0, 122, 255, 0.4)',
-          }}
-          title="Auto-paste enabled"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill={themeColors.primaryText} />
-          </svg>
-        </div>
-      )}
+       {/* Drag indicator - small dots icon */}
+       <div
+         style={{
+           position: 'absolute',
+           bottom: '4px',
+           left: '4px',
+           width: '18px',
+           height: '18px',
+           borderRadius: '50%',
+           backgroundColor: isDragging ? 'rgba(0, 122, 255, 0.3)' : 'rgba(128, 128, 128, 0.3)',
+           border: `1px solid ${isDragging ? 'rgba(0, 122, 255, 0.5)' : 'rgba(255, 255, 255, 0.3)'}`,
+           display: 'flex',
+           alignItems: 'center',
+           justifyContent: 'center',
+           zIndex: 1001,
+           pointerEvents: 'none',
+           opacity: isDragging ? 1 : 0.8,
+           transition: 'all 0.2s ease',
+           boxShadow: isDragging ? '0 2px 6px rgba(0, 122, 255, 0.4)' : '0 1px 3px rgba(0, 0, 0, 0.3)',
+         }}
+         title={isDragging ? "Dragging..." : "Drag to move"}
+       >
+         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <circle cx="5" cy="5" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="12" cy="5" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="19" cy="5" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="5" cy="12" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="12" cy="12" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="19" cy="12" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="5" cy="19" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="12" cy="19" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+           <circle cx="19" cy="19" r="1.5" fill={isDragging ? themeColors.primaryBlue : themeColors.mutedText} />
+         </svg>
+       </div>
+
+       {/* Status indicator badge - shows recording/processing/ready state */}
+       {autoPasteEnabled && (
+         <div
+           style={{
+             position: 'absolute',
+             top: '-8px',
+             right: '-8px',
+             width: '20px',
+             height: '20px',
+             borderRadius: '50%',
+             backgroundColor: isRecording 
+               ? (isDetectingVoice ? themeColors.errorRed : themeColors.warningOrange)
+               : isProcessing 
+               ? themeColors.warningOrange 
+               : themeColors.primaryBlue,
+             border: `2px solid ${themeColors.primaryBackground}`,
+             display: 'flex',
+             alignItems: 'center',
+             justifyContent: 'center',
+             zIndex: 1001,
+             boxShadow: isRecording 
+               ? `0 2px 8px ${isDetectingVoice ? themeColors.errorRed + '80' : themeColors.warningOrange + '80'}`
+               : isProcessing
+               ? `0 2px 8px ${themeColors.warningOrange + '80'}`
+               : '0 2px 8px rgba(0, 122, 255, 0.4)',
+             animation: isRecording ? 'pulse 1.5s infinite' : 'none',
+             transition: 'all 0.3s ease',
+           }}
+           title={
+             isRecording 
+               ? (isDetectingVoice ? "Recording - Voice detected" : "Recording...")
+               : isProcessing 
+               ? "Processing transcription..."
+               : "Ready to record"
+           }
+         >
+           {isRecording ? (
+             // Recording indicator - small circle
+             <div
+               style={{
+                 width: '8px',
+                 height: '8px',
+                 borderRadius: '50%',
+                 backgroundColor: themeColors.primaryText,
+               }}
+             />
+           ) : isProcessing ? (
+             // Processing indicator - spinner
+             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+               <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="15.708" opacity="0.3" />
+               <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="7.854" opacity="0.6">
+                 <animateTransform
+                   attributeName="transform"
+                   type="rotate"
+                   from="0 12 12"
+                   to="360 12 12"
+                   dur="1s"
+                   repeatCount="indefinite"
+                 />
+               </circle>
+             </svg>
+           ) : (
+             // Ready indicator - checkmark
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill={themeColors.primaryText} />
+             </svg>
+           )}
+         </div>
+       )}
 
       {/* Recording indicator / Mic button */}
       <div
         style={{
-          width: autoPasteEnabled ? '50px' : '60px',
-          height: autoPasteEnabled ? '50px' : '60px',
+          width: '60px',
+          height: '60px',
           borderRadius: '50%',
           backgroundColor: isRecording 
             ? (isDetectingVoice ? themeColors.errorRed : themeColors.warningOrange)
@@ -573,14 +654,14 @@ const AirtypeOverlay = () => {
           }
         `}</style>
         
-        {/* Microphone Icon - smaller when auto-paste enabled */}
+        {/* Microphone Icon */}
         <svg
-          width={autoPasteEnabled ? "20" : "30"}
-          height={autoPasteEnabled ? "20" : "30"}
+          width="30"
+          height="30"
           viewBox="0 0 24 24"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          style={{ zIndex: 2, position: 'relative' }}
+          style={{ zIndex: 2, position: 'relative', pointerEvents: 'none' }}
         >
           <path
             d="M12 1C10.34 1 9 2.34 9 4V12C9 13.66 10.34 15 12 15C13.66 15 15 13.66 15 12V4C15 2.34 13.66 1 12 1Z"
