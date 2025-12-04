@@ -32,7 +32,15 @@ const BROADCASTABLE_ACTIONS = [
   'leads/removeLeadsByBucketId',
   'leads/setLoading',
   'leads/setError',
-  'leads/setSelectedBucketId'
+  'leads/setSelectedBucketId',
+  'teams/setTeams',
+  'teams/addTeam',
+  'teams/updateTeam',
+  'teams/deleteTeam',
+  'teams/setLoading',
+  'teams/setError',
+  'teams/setSelectedTeamId',
+  'teams/setViewMode'
 ];
 
 /**
@@ -51,9 +59,20 @@ const ipcSyncMiddleware = (store) => (next) => (action) => {
 
       // Send to main process for broadcasting
       if (window.electronAPI && window.electronAPI.broadcastReduxAction) {
+        // For bucket and lead actions, we need to preserve the context parameter
+        // Check if this action type needs context (buckets or leads actions)
+        const needsContext = action.type.startsWith('buckets/') || action.type.startsWith('leads/');
+        
+        // Prepare the payload to broadcast
+        // Bucket/lead actions always have context (defaults to 'personal'), so include it
+        // Other actions (teams, etc.) just send data
+        const broadcastPayload = needsContext
+          ? { data: action.payload.data, context: action.payload.context || 'personal' }
+          : action.payload.data;
+        
         window.electronAPI.broadcastReduxAction({
           type: action.type,
-          payload: action.payload.data,
+          payload: broadcastPayload,
           timestamp: Date.now(),
           sourceWindow: window.location.href
         });
