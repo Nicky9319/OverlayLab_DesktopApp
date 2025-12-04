@@ -20,8 +20,8 @@ export const fetchLeads = createAsyncThunk(
   'leads/fetchLeads',
   async (bucketId = null, { dispatch, rejectWithValue }) => {
     try {
-      dispatch(setLoading(true));
-      dispatch(setSelectedBucketId(bucketId));
+      dispatch(setLoading(true, 'personal', true));
+      dispatch(setSelectedBucketId(bucketId, 'personal', true));
       
       const leads = await leadflowService.getAllLeads(bucketId);
       
@@ -38,12 +38,12 @@ export const fetchLeads = createAsyncThunk(
         ...lead // Preserve other fields
       }));
       
-      // Broadcast to all windows (broadcast=true) - this also updates local state now
-      dispatch(setLeads(normalizedLeads, true));
+      // Store in personal context - Broadcast to all windows (broadcast=true)
+      dispatch(setLeads(normalizedLeads, 'personal', true));
       return normalizedLeads;
     } catch (error) {
       const errorMessage = error.message || 'Failed to fetch leads';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -73,17 +73,17 @@ export const createLead = createAsyncThunk(
           ...response.content
         };
         
-        // Broadcast to all windows (broadcast=true)
-        dispatch(addLeadAction(normalizedLead, true));
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(addLeadAction(normalizedLead, 'personal', true));
         return normalizedLead;
       } else {
         const errorMessage = response.content?.detail || 'Failed to create lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to create lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -100,17 +100,17 @@ export const updateLeadStatus = createAsyncThunk(
       const response = await leadflowService.updateLeadStatus(leadId, status);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadStatusAction({ leadId, status }, true));
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadStatusAction({ leadId, status }, 'personal', true));
         return { leadId, status };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update lead status';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update lead status';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -127,17 +127,17 @@ export const updateLeadNotes = createAsyncThunk(
       const response = await leadflowService.updateLeadNotes(leadId, notes);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadNotesAction({ leadId, notes }, true));
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadNotesAction({ leadId, notes }, 'personal', true));
         return { leadId, notes };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update lead notes';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update lead notes';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -154,17 +154,17 @@ export const removeLead = createAsyncThunk(
       const response = await leadflowService.deleteLead(leadId, bucketId);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(deleteLeadAction(leadId, true));
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(deleteLeadAction(leadId, 'personal', true));
         return leadId;
       } else {
         const errorMessage = response.content?.detail || 'Failed to delete lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to delete lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
@@ -181,17 +181,17 @@ export const moveLeadToBucket = createAsyncThunk(
       const response = await leadflowService.moveLeadToBucket(leadId, targetBucketId, sourceBucketId);
       
       if (response.status_code === 200) {
-        // Broadcast to all windows (broadcast=true)
-        dispatch(moveLeadToBucketAction({ leadId, targetBucketId }, true));
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(moveLeadToBucketAction({ leadId, targetBucketId }, 'personal', true));
         return { leadId, targetBucketId };
       } else {
         const errorMessage = response.content?.detail || 'Failed to move lead';
-        dispatch(setError(errorMessage));
+        dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to move lead';
-      dispatch(setError(errorMessage));
+      dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }
   }
