@@ -9,6 +9,7 @@ import overlaySelectorReducer from './slices/overlaySelectorSlice'
 // Use global slices for buckets and leads to ensure state synchronization across all windows
 import bucketsReducer from '../../store/slices/bucketsSlice'
 import leadsReducer from '../../store/slices/leadsSlice'
+import teamsReducer from '../../store/slices/teamsSlice'
 import ipcSyncMiddleware from '../../store/middleware/ipcSyncMiddleware'
 
 export const store = configureStore({
@@ -22,6 +23,7 @@ export const store = configureStore({
     overlaySelector: overlaySelectorReducer,
     buckets: bucketsReducer,
     leads: leadsReducer,
+    teams: teamsReducer,
     // Add your other reducers here as you create them
   },
   middleware: (getDefaultMiddleware) =>

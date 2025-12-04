@@ -3,68 +3,123 @@ import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
 import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
+import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
+import { fetchTeamLeads, updateTeamLeadStatus, updateTeamLeadNotes, removeTeamLead, moveTeamLeadToBucket } from '../../../store/thunks/teamLeadsThunks';
 import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 
 const Leads = () => {
   const dispatch = useDispatch();
   
-  // Get data from Redux state
-  const { leads, loading, selectedBucketId } = useSelector((state) => state.leads);
-  const { buckets, loading: bucketsLoading } = useSelector((state) => state.buckets);
+  // Get view mode and selected team
+  const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
+  
+  // Read directly from Redux state based on view mode - no filtering needed
+  const bucketsState = viewMode === 'team' && selectedTeamId
+    ? useSelector((state) => state.buckets.teams[selectedTeamId] || { buckets: [], loading: false, error: null, selectedBucketId: null })
+    : useSelector((state) => state.buckets.personal);
+  
+  const leadsState = viewMode === 'team' && selectedTeamId
+    ? useSelector((state) => state.leads.teams[selectedTeamId] || { leads: [], loading: false, error: null, selectedBucketId: null })
+    : useSelector((state) => state.leads.personal);
+  
+  const { buckets, loading: bucketsLoading, error: bucketsError, selectedBucketId: bucketsSelectedBucketId } = bucketsState;
+  const { leads, loading, selectedBucketId } = leadsState;
+  
+  // Use buckets and leads directly from Redux - already filtered by context
+  const filteredBuckets = Array.isArray(buckets) ? buckets : [];
+  const filteredLeads = Array.isArray(leads) ? leads : [];
 
-  // Filter leads by selected bucket (if a bucket is selected)
-  const filteredLeads = selectedBucketId 
-    ? leads.filter(lead => lead.bucketId === selectedBucketId || lead.bucket_id === selectedBucketId)
-    : leads;
-
-  // Fetch buckets and leads on component mount
+  // Fetch buckets and leads based on view mode
   useEffect(() => {
     const loadData = async () => {
-      // Fetch buckets first
-      const bucketsResult = await dispatch(fetchBuckets());
-      
-      // Get buckets from the result or from Redux state
-      let bucketsData = [];
-      if (fetchBuckets.fulfilled.match(bucketsResult)) {
-        bucketsData = bucketsResult.payload;
+      if (viewMode === 'team') {
+        // Team mode: fetch team buckets and leads
+        if (selectedTeamId) {
+          const bucketsResult = await dispatch(fetchTeamBuckets(selectedTeamId));
+          
+          let bucketsData = [];
+          if (fetchTeamBuckets.fulfilled.match(bucketsResult)) {
+            bucketsData = bucketsResult.payload || [];
+          } else {
+            // On error, use empty array instead of falling back to personal buckets
+            bucketsData = [];
+          }
+          
+          // Set first bucket as default if available
+          if (bucketsData.length > 0) {
+            const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
+            dispatch(setSelectedBucketId(firstBucketId, selectedTeamId, true));
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: firstBucketId }));
+          } else {
+            // If no buckets, load all team leads
+            dispatch(setSelectedBucketId(null, selectedTeamId, true));
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: null }));
+          }
+        }
       } else {
-        // Fallback: get from current state
-        bucketsData = buckets;
-      }
-      
-      // Set first bucket as default if available
-      if (bucketsData.length > 0) {
-        const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
-        dispatch(setSelectedBucketId(firstBucketId));
-        await dispatch(fetchLeads(firstBucketId));
-      } else {
-        // If no buckets, load all leads
-        await dispatch(fetchLeads(null));
+        // Customer mode: fetch customer buckets and leads
+        const bucketsResult = await dispatch(fetchBuckets());
+        
+        let bucketsData = [];
+        if (fetchBuckets.fulfilled.match(bucketsResult)) {
+          bucketsData = bucketsResult.payload;
+        } else {
+          bucketsData = [];
+        }
+        
+        // Set first bucket as default if available
+        if (bucketsData.length > 0) {
+          const firstBucketId = bucketsData[0].bucketId || bucketsData[0].id;
+          dispatch(setSelectedBucketId(firstBucketId, 'personal', true));
+          await dispatch(fetchLeads(firstBucketId));
+        } else {
+          // If no buckets, load all leads
+          dispatch(setSelectedBucketId(null, 'personal', true));
+          await dispatch(fetchLeads(null));
+        }
       }
     };
 
     loadData();
-  }, [dispatch]); // Only run on mount
+  }, [dispatch, viewMode, selectedTeamId]); // Reload when mode or team changes
 
   // Handle bucket selection
   const handleBucketChange = (bucketId) => {
-    dispatch(setSelectedBucketId(bucketId));
-    dispatch(fetchLeads(bucketId || null));
+    if (viewMode === 'team' && selectedTeamId) {
+      dispatch(setSelectedBucketId(bucketId, selectedTeamId, true));
+      dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: bucketId || null }));
+    } else {
+      dispatch(setSelectedBucketId(bucketId, 'personal', true));
+      dispatch(fetchLeads(bucketId || null));
+    }
   };
 
   // Handle refetch all leads
   const handleRefetchLeads = () => {
-    dispatch(fetchLeads(selectedBucketId));
+    if (viewMode === 'team' && selectedTeamId) {
+      dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: selectedBucketId }));
+    } else {
+      dispatch(fetchLeads(selectedBucketId));
+    }
   };
 
   // Function to update lead notes
   const handleUpdateLeadNotes = async (leadId, newNotes) => {
     try {
-      const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
-      if (updateLeadNotes.fulfilled.match(result)) {
-        console.log('Notes updated successfully for lead:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newNotes }));
+        if (updateTeamLeadNotes.fulfilled.match(result)) {
+          console.log('Notes updated successfully for team lead:', leadId);
+        } else {
+          console.error('Failed to update team lead notes:', result.error);
+        }
       } else {
-        console.error('Failed to update notes:', result.error);
+        const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
+        if (updateLeadNotes.fulfilled.match(result)) {
+          console.log('Notes updated successfully for lead:', leadId);
+        } else {
+          console.error('Failed to update notes:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error updating lead notes:', error);
@@ -74,11 +129,20 @@ const Leads = () => {
   // Function to update lead status
   const handleUpdateLeadStatus = async (leadId, newStatus) => {
     try {
-      const result = await dispatch(updateLeadStatus({ leadId, status: newStatus }));
-      if (updateLeadStatus.fulfilled.match(result)) {
-        console.log('Status updated successfully for lead:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(updateTeamLeadStatus({ teamId: selectedTeamId, leadId, status: newStatus }));
+        if (updateTeamLeadStatus.fulfilled.match(result)) {
+          console.log('Status updated successfully for team lead:', leadId);
+        } else {
+          console.error('Failed to update team lead status:', result.error);
+        }
       } else {
-        console.error('Failed to update status:', result.error);
+        const result = await dispatch(updateLeadStatus({ leadId, status: newStatus }));
+        if (updateLeadStatus.fulfilled.match(result)) {
+          console.log('Status updated successfully for lead:', leadId);
+        } else {
+          console.error('Failed to update status:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error updating lead status:', error);
@@ -88,11 +152,20 @@ const Leads = () => {
   // Function to delete lead
   const handleDeleteLead = async (leadId) => {
     try {
-      const result = await dispatch(removeLead({ leadId, bucketId: selectedBucketId }));
-      if (removeLead.fulfilled.match(result)) {
-        console.log('Lead deleted successfully:', leadId);
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(removeTeamLead({ teamId: selectedTeamId, leadId }));
+        if (removeTeamLead.fulfilled.match(result)) {
+          console.log('Team lead deleted successfully:', leadId);
+        } else {
+          console.error('Failed to delete team lead:', result.error);
+        }
       } else {
-        console.error('Failed to delete lead:', result.error);
+        const result = await dispatch(removeLead({ leadId, bucketId: selectedBucketId }));
+        if (removeLead.fulfilled.match(result)) {
+          console.log('Lead deleted successfully:', leadId);
+        } else {
+          console.error('Failed to delete lead:', result.error);
+        }
       }
     } catch (error) {
       console.error('Error deleting lead:', error);
@@ -103,17 +176,32 @@ const Leads = () => {
   const handleMoveLeadToBucket = async (leadId, targetBucketId, sourceBucketId) => {
     try {
       console.log('Moving lead:', { leadId, targetBucketId, sourceBucketId });
-      const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
-      
-      if (moveLeadToBucket.fulfilled.match(result)) {
-        // If we're currently viewing the target bucket, refresh to show the moved lead
-        if (selectedBucketId === targetBucketId) {
-          await dispatch(fetchLeads(targetBucketId));
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(moveTeamLeadToBucket({ teamId: selectedTeamId, leadId, targetBucketId }));
+        
+        if (moveTeamLeadToBucket.fulfilled.match(result)) {
+          // If we're currently viewing the target bucket, refresh to show the moved lead
+          if (selectedBucketId === targetBucketId) {
+            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: targetBucketId }));
+          }
+          console.log('Team lead moved successfully to bucket:', targetBucketId);
+        } else {
+          console.error('Failed to move team lead:', result.error);
+          throw new Error(result.error || 'Failed to move team lead');
         }
-        console.log('Lead moved successfully to bucket:', targetBucketId);
       } else {
-        console.error('Failed to move lead:', result.error);
-        throw new Error(result.error || 'Failed to move lead');
+        const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
+        
+        if (moveLeadToBucket.fulfilled.match(result)) {
+          // If we're currently viewing the target bucket, refresh to show the moved lead
+          if (selectedBucketId === targetBucketId) {
+            await dispatch(fetchLeads(targetBucketId));
+          }
+          console.log('Lead moved successfully to bucket:', targetBucketId);
+        } else {
+          console.error('Failed to move lead:', result.error);
+          throw new Error(result.error || 'Failed to move lead');
+        }
       }
     } catch (error) {
       console.error('Error moving lead:', error);
@@ -157,9 +245,10 @@ const Leads = () => {
                 value={selectedBucketId || ''}
                 onChange={(e) => handleBucketChange(e.target.value || null)}
                 className="px-3 py-2 bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                disabled={bucketsError && viewMode === 'team'}
               >
                 <option value="">All Leads</option>
-                {buckets.map((bucket) => (
+                {filteredBuckets.map((bucket) => (
                   <option key={bucket.bucketId || bucket.id} value={bucket.bucketId || bucket.id}>
                     {bucket.bucketName || bucket.name}
                   </option>
@@ -188,9 +277,36 @@ const Leads = () => {
             </button>
           </div>
           
+          {/* Error display */}
+          {bucketsError && viewMode === 'team' && selectedTeamId && (
+            <div className="mb-4 p-4 bg-red-900/20 border border-red-500/50 rounded-lg">
+              <p className="text-sm text-red-400 mb-2">Error loading team buckets: {bucketsError}</p>
+              <button
+                onClick={() => dispatch(fetchTeamBuckets(selectedTeamId))}
+                className="text-sm text-red-300 hover:text-red-200 underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          
           {/* Lead count display */}
           <div className="text-sm text-[#8E8E93] mb-4">
-            Showing {filteredLeads.length} leads {selectedBucketId ? `from bucket: ${buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || buckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
+            {viewMode === 'team' && selectedTeamId && bucketsError ? (
+              <span className="text-red-400">Unable to load buckets. Please retry.</span>
+            ) : (
+              <>
+                Showing {filteredLeads.length} leads{' '}
+                {viewMode === 'team' && selectedTeamId ? (
+                  <>
+                    for team: {teams.find(t => (t.teamId || t.id) === selectedTeamId)?.teamName || 'Unknown'}{' '}
+                    {selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
+                  </>
+                ) : (
+                  selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'
+                )}
+              </>
+            )}
           </div>
         </div>
         
@@ -200,7 +316,7 @@ const Leads = () => {
           updateLeadStatus={handleUpdateLeadStatus} 
           deleteLead={handleDeleteLead}
           moveLeadToBucket={handleMoveLeadToBucket}
-          buckets={buckets}
+          buckets={filteredBuckets}
           currentBucketId={selectedBucketId}
         />
       </div>

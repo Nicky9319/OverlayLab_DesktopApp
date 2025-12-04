@@ -1,12 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserButton, useAuth } from '@clerk/clerk-react';
+import { useSelector, useDispatch } from 'react-redux';
 import { clearToken, setCustomerId } from '../../../../utils/clerkTokenProvider';
 import { authenticateCustomerId } from '../../../../services/authService';
+import { fetchAllTeams } from '../../../../store/thunks/teamsThunks';
+import { setSelectedTeamId } from '../../../../store/slices/teamsSlice';
 import LeftNavBar from '../../left-navbar/left-nav-bar';
 import Leads from '../../leads/leads';
 import Buckets from '../../buckets/buckets';
 import Taskbar from '../../taskbar/taskbar';
+import PersonalTeamToggle from '../../common/components/PersonalTeamToggle';
+import TeamSelection from '../../teams/components/TeamSelection';
+import EditTeamNameModal from '../../teams/components/EditTeamNameModal';
+import AddTeamMemberModal from '../../teams/components/AddTeamMemberModal';
+import TeamMembers from '../../teams/components/TeamMembers';
 
 const MainPage = () => {
     const [activeTab, setActiveTab] = useState('buckets');
@@ -15,6 +23,10 @@ const MainPage = () => {
     const authenticationAttempts = useRef(0);
     const maxRetries = 5;
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
+    const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
+    const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
 
     const handleTabChange = (tabId) => {
         setActiveTab(tabId);
@@ -23,6 +35,23 @@ const MainPage = () => {
     const handleBackToDashboard = () => {
         navigate('/');
     };
+
+    const handleBackToTeamSelection = () => {
+        dispatch(setSelectedTeamId(null));
+    };
+
+    const handleTeamUpdated = () => {
+        // Refresh teams list after updating team name
+        dispatch(fetchAllTeams());
+    };
+
+    const handleMemberAdded = () => {
+        // Refresh teams list after adding a member
+        dispatch(fetchAllTeams());
+    };
+
+    // Get current team object
+    const currentTeam = teams.find(t => (t.teamId || t.id) === selectedTeamId);
 
     // Expose clearToken globally for UserButton callback
     useEffect(() => {
@@ -125,10 +154,25 @@ const MainPage = () => {
         };
     }, [isLoaded, isSignedIn, getToken]);
 
+    // Fetch teams when switching to team mode
+    useEffect(() => {
+        if (viewMode === 'team') {
+            dispatch(fetchAllTeams());
+        }
+    }, [dispatch, viewMode]);
+
     const renderActiveComponent = () => {
+        // Show team selection page if in team mode and no team is selected
+        if (viewMode === 'team' && !selectedTeamId) {
+            return <TeamSelection />;
+        }
+
+        // Otherwise show normal content (buckets/leads/team)
         switch (activeTab) {
             case 'leads':
                 return <Leads />;
+            case 'team':
+                return <TeamMembers />;
             case 'buckets':
             default:
                 return <Buckets />;
@@ -138,7 +182,12 @@ const MainPage = () => {
     return (
         <div className="main-container">
             <Taskbar />
-            <LeftNavBar activeTab={activeTab} onTabChange={handleTabChange} />
+            <LeftNavBar 
+                activeTab={activeTab} 
+                onTabChange={handleTabChange}
+                viewMode={viewMode}
+                selectedTeamId={selectedTeamId}
+            />
             <div className="content-area">
                 <header className="page-header">
                     <div style={{ 
@@ -188,8 +237,10 @@ const MainPage = () => {
                     <div style={{ 
                         display: 'flex', 
                         alignItems: 'center',
+                        gap: '12px',
                         marginLeft: 'auto'
                     }}>
+                        <PersonalTeamToggle />
                         <UserButton 
                             appearance={{
                                 elements: {
@@ -228,6 +279,172 @@ const MainPage = () => {
                         />
                     </div>
                 </header>
+                
+                {/* Team Navigation Bar - shown only when team is selected */}
+                {viewMode === 'team' && selectedTeamId && (
+                    <div style={{
+                        padding: '16px 24px',
+                        backgroundColor: '#000000',
+                        borderBottom: '1px solid #1C1C1E',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px'
+                    }}>
+                        <button
+                            onClick={handleBackToTeamSelection}
+                            style={{
+                                padding: '8px 12px',
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                backgroundColor: '#1C1C1E',
+                                color: '#FFFFFF',
+                                border: '1px solid #2D2D2F',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                transition: 'background-color 0.2s, border-color 0.2s',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.backgroundColor = '#2D2D2F';
+                                e.target.style.borderColor = '#007AFF';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.backgroundColor = '#1C1C1E';
+                                e.target.style.borderColor = '#2D2D2F';
+                            }}
+                            title="Back to Teams"
+                        >
+                            <svg 
+                                width="16" 
+                                height="16" 
+                                viewBox="0 0 24 24" 
+                                fill="none" 
+                                stroke="currentColor" 
+                                strokeWidth="2"
+                            >
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                            </svg>
+                            Back
+                        </button>
+                        <div style={{
+                            fontSize: '16px',
+                            fontWeight: '400',
+                            color: '#8E8E93',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}>
+                            <span>Team:</span>
+                            <span style={{ color: '#FFFFFF', fontWeight: '500' }}>
+                                {currentTeam?.teamName || currentTeam?.name || 'Team'}
+                            </span>
+                        </div>
+                        <div style={{
+                            marginLeft: 'auto',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}>
+                            <button
+                                onClick={() => setIsEditTeamModalOpen(true)}
+                                style={{
+                                    padding: '6px 12px',
+                                    fontSize: '13px',
+                                    fontWeight: '500',
+                                    backgroundColor: '#1C1C1E',
+                                    color: '#FFFFFF',
+                                    border: '1px solid #2D2D2F',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s, border-color 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = '#2D2D2F';
+                                    e.target.style.borderColor = '#007AFF';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = '#1C1C1E';
+                                    e.target.style.borderColor = '#2D2D2F';
+                                }}
+                                title="Edit team name"
+                            >
+                                <svg 
+                                    width="14" 
+                                    height="14" 
+                                    viewBox="0 0 24 24" 
+                                    fill="none" 
+                                    stroke="currentColor" 
+                                    strokeWidth="2"
+                                >
+                                    <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Edit Name
+                            </button>
+                            <button
+                                onClick={() => setIsAddMemberModalOpen(true)}
+                                style={{
+                                    padding: '6px 12px',
+                                    fontSize: '13px',
+                                    fontWeight: '500',
+                                    backgroundColor: '#007AFF',
+                                    color: '#FFFFFF',
+                                    border: '1px solid #007AFF',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    transition: 'background-color 0.2s, border-color 0.2s',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = '#0056CC';
+                                    e.target.style.borderColor = '#0056CC';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = '#007AFF';
+                                    e.target.style.borderColor = '#007AFF';
+                                }}
+                                title="Add team member"
+                            >
+                                <svg 
+                                    width="14" 
+                                    height="14" 
+                                    viewBox="0 0 24 24" 
+                                    fill="none" 
+                                    stroke="currentColor" 
+                                    strokeWidth="2"
+                                >
+                                    <path d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                Add Member
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Team Management Modals */}
+                {viewMode === 'team' && selectedTeamId && currentTeam && (
+                    <>
+                        <EditTeamNameModal
+                            isOpen={isEditTeamModalOpen}
+                            onClose={() => setIsEditTeamModalOpen(false)}
+                            team={currentTeam}
+                            onTeamUpdated={handleTeamUpdated}
+                        />
+                        <AddTeamMemberModal
+                            isOpen={isAddMemberModalOpen}
+                            onClose={() => setIsAddMemberModalOpen(false)}
+                            team={currentTeam}
+                            onMemberAdded={handleMemberAdded}
+                        />
+                    </>
+                )}
+                
                 <div className="content-wrapper">
                     {renderActiveComponent()}
                 </div>
