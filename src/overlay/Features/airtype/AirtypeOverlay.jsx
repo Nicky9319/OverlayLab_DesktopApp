@@ -29,6 +29,11 @@ const AirtypeOverlay = () => {
   
   const currentOverlayType = useSelector((state) => state.overlayType.currentOverlayType);
 
+  // Detect platform for shortcut display
+  const isMac = navigator.platform.toUpperCase().includes('MAC') || 
+                (window.process && window.process.platform === 'darwin');
+  const shortcutKey = isMac ? 'Option+1' : 'Ctrl+1';
+
   // Load auto-paste setting
   useEffect(() => {
     const loadAutoPasteSetting = async () => {
@@ -84,13 +89,17 @@ const AirtypeOverlay = () => {
       }
     };
 
-    // Listen for keyboard shortcut (Ctrl+1) in overlay window
+    // Detect platform
+    const isMac = navigator.platform.toUpperCase().includes('MAC') || 
+                  (window.process && window.process.platform === 'darwin');
+
+    // Listen for keyboard shortcut (Ctrl+1 on Windows, Option+1 on macOS) in overlay window
     const handleKeyDown = (e) => {
       // Only handle if AirType overlay is active
       if (currentOverlayType !== 'airtype') return;
       
-      // Check for Ctrl+1 (or Cmd+1 on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+      // Check for Ctrl+1 on Windows or Option+1 on macOS
+      if ((e.ctrlKey || (isMac && e.altKey)) && e.key === '1') {
         e.preventDefault();
         e.stopPropagation();
         
@@ -744,11 +753,11 @@ const AirtypeOverlay = () => {
         >
           {isRecording 
             ? (isDetectingVoice 
-                ? '🎤 Listening... (Press Ctrl+1 to stop)' 
-                : 'Recording... (Press Ctrl+1 to stop)')
+                ? `🎤 Listening... (Press ${shortcutKey} to stop)` 
+                : `Recording... (Press ${shortcutKey} to stop)`)
             : isProcessing 
             ? 'Processing...' 
-            : 'Press Ctrl+1 to record'}
+            : `Press ${shortcutKey} to record`}
         </div>
       )}
 

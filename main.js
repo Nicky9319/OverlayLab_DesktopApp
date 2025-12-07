@@ -3677,8 +3677,8 @@ app.whenReady().then(async () => {
     logger.debug('F5 is disabled');
   });
 
-  // Widget toggle shortcut (Ctrl + `)
-  globalShortcut.register('CommandOrControl+`', () => {
+  // Widget toggle shortcut (Ctrl + ` on Windows, Option + ` on macOS)
+  const widgetToggleHandler = () => {
     logger.debug('Widget toggle shortcut pressed');
     if (widgetWindow && !widgetWindow.isDestroyed()) {
       if (widgetWindow.isVisible()) {
@@ -3702,11 +3702,17 @@ app.whenReady().then(async () => {
       logger.debug('Widget window does not exist, creating new one');
       createWidgetWindow();
     }
-  });
+  };
 
-  // Overlay selector shortcut (Ctrl + Q)
-  globalShortcut.register('CommandOrControl+Q', () => {
-    logger.debug('Overlay selector shortcut Ctrl+Q pressed');
+  if (isMac) {
+    globalShortcut.register('Alt+`', widgetToggleHandler);
+  } else {
+    globalShortcut.register('CommandOrControl+`', widgetToggleHandler);
+  }
+
+  // Overlay selector shortcut (Ctrl + Q on Windows, Option + Q on macOS)
+  const overlaySelectorHandler = () => {
+    logger.debug('Overlay selector shortcut Ctrl+Q/Option+Q pressed');
     if (widgetWindow && widgetWindow.window && !widgetWindow.isDestroyed()) {
       // Ensure window is visible
       if (!widgetWindow.isVisible()) {
@@ -3718,11 +3724,17 @@ app.whenReady().then(async () => {
       widgetWindow.window.webContents.send('overlay:openSelector');
       logger.debug('Sent openSelector event to overlay window');
     }
-  });
+  };
 
-  // Screenshot/Voice Recording shortcut (Ctrl + 1)
-  globalShortcut.register('CommandOrControl+1', () => {
-    logger.debug('Ctrl+1 shortcut pressed');
+  if (isMac) {
+    globalShortcut.register('Alt+Q', overlaySelectorHandler);
+  } else {
+    globalShortcut.register('CommandOrControl+Q', overlaySelectorHandler);
+  }
+
+  // Screenshot/Voice Recording shortcut (Ctrl + 1 on Windows, Option + 1 on macOS)
+  const screenshotRecordingHandler = () => {
+    logger.debug('Ctrl+1/Option+1 shortcut pressed');
     
     // Check current overlay type from store
     let currentOverlayType = 'leadflow'; // default
@@ -3747,7 +3759,7 @@ app.whenReady().then(async () => {
     }
     
     // Otherwise, handle screenshot (original functionality)
-    logger.debug('Screenshot shortcut Ctrl+1 pressed');
+    logger.debug('Screenshot shortcut Ctrl+1/Option+1 pressed');
     
     const now = Date.now();
     const cooldownTime = 1500; // 1.5 seconds cooldown
@@ -3798,7 +3810,13 @@ app.whenReady().then(async () => {
     } else {
       console.warn('Widget window not available for global shortcut validation');
     }
-  });
+  };
+
+  if (isMac) {
+    globalShortcut.register('Alt+1', screenshotRecordingHandler);
+  } else {
+    globalShortcut.register('CommandOrControl+1', screenshotRecordingHandler);
+  }
 
   // Initialize DB - removed for now
 
