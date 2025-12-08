@@ -65,6 +65,17 @@ const ActionBar = () => {
   // Ref to track if we've attempted to load buckets on mount
   const hasLoadedBucketsRef = useRef(false);
   
+  // State for metrics bar visibility with localStorage persistence
+  const [metricsBarVisible, setMetricsBarVisible] = useState(() => {
+    try {
+      const saved = localStorage.getItem('metricsBarVisible');
+      return saved === 'true';
+    } catch (error) {
+      console.error('Error reading metricsBarVisible from localStorage:', error);
+      return false;
+    }
+  });
+  
   const position = floatingWidgetPosition || { x: 1200, y: 20 };
   const isNearRightEdge = position.x > window.innerWidth - (dynamicBarWidth + 50);
   const safeLeft = isNearRightEdge ?
@@ -1712,6 +1723,49 @@ const ActionBar = () => {
               {screenshotStatus === 'processing' ? 'Taking...' : 'Add'}
             </button>
           </div>
+
+          {/* Metrics Toggle Button - Only show in personal mode */}
+          {localViewMode === 'customer' && (
+            <button
+              onClick={() => {
+                const newVisibility = !metricsBarVisible;
+                setMetricsBarVisible(newVisibility);
+                try {
+                  localStorage.setItem('metricsBarVisible', newVisibility.toString());
+                  // Dispatch custom event to notify MetricBar
+                  window.dispatchEvent(new CustomEvent('metricsBarVisibilityChanged', { 
+                    detail: { visible: newVisibility } 
+                  }));
+                } catch (error) {
+                  console.error('Error saving metricsBarVisible to localStorage:', error);
+                }
+              }}
+              style={{
+                background: themeColors.surfaceBackground,
+                border: `1px solid ${themeColors.borderColor}`,
+                borderRadius: '6px',
+                padding: '6px 10px',
+                color: themeColors.primaryText,
+                fontSize: '10px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap',
+                minWidth: '80px'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = themeColors.hoverBackground;
+                e.target.style.borderColor = themeColors.primaryBlue;
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = themeColors.surfaceBackground;
+                e.target.style.borderColor = themeColors.borderColor;
+              }}
+              title={metricsBarVisible ? "Hide metrics" : "Show metrics"}
+            >
+              {metricsBarVisible ? 'Hide Metrics' : 'Show Metrics'}
+            </button>
+          )}
         </div>
       </div>
 

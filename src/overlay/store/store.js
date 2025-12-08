@@ -10,6 +10,7 @@ import overlaySelectorReducer from './slices/overlaySelectorSlice'
 import bucketsReducer from '../../store/slices/bucketsSlice'
 import leadsReducer from '../../store/slices/leadsSlice'
 import teamsReducer from '../../store/slices/teamsSlice'
+import metricsReducer from '../../store/slices/metricsSlice'
 import ipcSyncMiddleware from '../../store/middleware/ipcSyncMiddleware'
 
 export const store = configureStore({
@@ -24,6 +25,7 @@ export const store = configureStore({
     buckets: bucketsReducer,
     leads: leadsReducer,
     teams: teamsReducer,
+    metrics: metricsReducer,
     // Add your other reducers here as you create them
   },
   middleware: (getDefaultMiddleware) =>
@@ -48,12 +50,18 @@ if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.on
     try {
       console.log('Received broadcasted Redux action:', actionData.type);
       
-      // Check if this action needs context (buckets or leads actions)
-      const needsContext = actionData.type.startsWith('buckets/') || actionData.type.startsWith('leads/');
+      // Check if this action needs context (buckets, leads, or metrics actions)
+      const needsContext = actionData.type.startsWith('buckets/') || actionData.type.startsWith('leads/') || actionData.type.startsWith('metrics/');
       
       // Reconstruct payload based on whether it needs context
       let payload;
-      if (needsContext) {
+      if (actionData.type.startsWith('metrics/')) {
+        // Metrics actions: preserve the full payload structure (metricId, visible, context, etc.)
+        payload = {
+          ...actionData.payload,
+          broadcast: false
+        };
+      } else if (needsContext) {
         // Buckets/leads actions: payload should have { data, context } structure
         if (actionData.payload && typeof actionData.payload === 'object' && 'context' in actionData.payload) {
           // Payload has context (team or personal buckets/leads)

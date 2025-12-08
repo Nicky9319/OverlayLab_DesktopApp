@@ -7,6 +7,7 @@ import ActionBar from '../../actionBar/ActionBar';
 import OverlaySelector from '../../overlaySelector/OverlaySelector';
 import AirtypeOverlay from '../../airtype/AirtypeOverlay';
 import ClipVaultOverlay from '../../clipvault/ClipVaultOverlay';
+import MetricBar from '../../metricBar/MetricBar';
 import { OVERLAY_TYPES } from '../../../config/overlayTypes';
 
 const MainPage = () => {
@@ -155,6 +156,11 @@ const MainPage = () => {
             }}>
               <ActionBar />
             </div>
+          )}
+          
+          {/* Metric Bar - Only show when action bar is visible */}
+          {localVisibility.actionBar && (
+            <MetricBar />
           )}
         </>
       )}

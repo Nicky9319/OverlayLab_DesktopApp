@@ -40,7 +40,14 @@ const BROADCASTABLE_ACTIONS = [
   'teams/setLoading',
   'teams/setError',
   'teams/setSelectedTeamId',
-  'teams/setViewMode'
+  'teams/setViewMode',
+  'metrics/setMetrics',
+  'metrics/setMetricVisibility',
+  'metrics/addMetric',
+  'metrics/updateMetric',
+  'metrics/removeMetric',
+  'metrics/setLoading',
+  'metrics/setError'
 ];
 
 /**
@@ -60,15 +67,24 @@ const ipcSyncMiddleware = (store) => (next) => (action) => {
       // Send to main process for broadcasting
       if (window.electronAPI && window.electronAPI.broadcastReduxAction) {
         // For bucket and lead actions, we need to preserve the context parameter
-        // Check if this action type needs context (buckets or leads actions)
-        const needsContext = action.type.startsWith('buckets/') || action.type.startsWith('leads/');
+      // Check if this action type needs context (buckets, leads, or metrics actions)
+      const needsContext = action.type.startsWith('buckets/') || action.type.startsWith('leads/') || action.type.startsWith('metrics/');
         
         // Prepare the payload to broadcast
         // Bucket/lead actions always have context (defaults to 'personal'), so include it
+        // Metrics actions have { metricId, visible, context } structure
         // Other actions (teams, etc.) just send data
-        const broadcastPayload = needsContext
-          ? { data: action.payload.data, context: action.payload.context || 'personal' }
-          : action.payload.data;
+        let broadcastPayload;
+        if (action.type.startsWith('metrics/')) {
+          // Metrics actions: preserve the full payload structure (metricId, visible, context, etc.)
+          // Remove the broadcast flag as it's not needed in the broadcast
+          const { broadcast, ...rest } = action.payload;
+          broadcastPayload = rest;
+        } else if (needsContext) {
+          broadcastPayload = { data: action.payload.data, context: action.payload.context || 'personal' };
+        } else {
+          broadcastPayload = action.payload.data;
+        }
         
         window.electronAPI.broadcastReduxAction({
           type: action.type,

@@ -1,4 +1,5 @@
 import { createSlice } from '@reduxjs/toolkit';
+import { setMetricVisibility as saveMetricVisibility, removeMetricVisibility as deleteMetricVisibility, getMetricVisibility } from '../../utils/metricVisibilityStorage';
 
 /**
  * Metrics Redux Slice with IPC Broadcast Support
@@ -183,13 +184,20 @@ const metricsSlice = createSlice({
         }
         
         const metric = data;
+        const metricId = metric.metricId || metric.id || metric.metric_id;
+        // Load visibility from localStorage if not provided (frontend-only property)
+        const visibleInActionBar = metric.visibleInActionBar !== undefined 
+          ? metric.visibleInActionBar 
+          : getMetricVisibility(metricId);
+        
         const normalizedMetric = {
-          metricId: metric.metricId || metric.id || metric.metric_id,
+          metricId,
           customerId: metric.customerId || metric.customer_id,
           fieldName: metric.fieldName || metric.field_name || '',
           objectiveCount: metric.objectiveCount || metric.objective_count || 0,
           backlogRemainingCount: metric.backlogRemainingCount || metric.backlog_remaining_count || 0,
           objectiveUpdates: Array.isArray(metric.objectiveUpdates) ? metric.objectiveUpdates : [],
+          visibleInActionBar,
           ...metric
         };
         
@@ -269,9 +277,49 @@ const metricsSlice = createSlice({
         if (targetTracking && targetTracking[metricId]) {
           delete targetTracking[metricId];
         }
+        
+        // Remove visibility from localStorage when metric is deleted (frontend-only property)
+        // localStorage is per-window, so each window removes its own copy
+        if (context === 'personal') {
+          deleteMetricVisibility(metricId);
+        }
       },
       prepare: (metricId, context = 'personal', broadcast = false) => ({
         payload: { metricId, context, broadcast }
+      })
+    },
+    
+    // Set metric visibility in action bar
+    // context: 'personal' or teamId string
+    setMetricVisibility: {
+      reducer: (state, action) => {
+        const { metricId, visible, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          return;
+        }
+        
+        const targetMetrics = context === 'personal' ? state.personal.metrics : state.teams[context].metrics;
+        const index = targetMetrics.findIndex(m => 
+          m.metricId === metricId || 
+          (m.id && m.id === metricId)
+        );
+        
+        if (index !== -1) {
+          targetMetrics[index] = {
+            ...targetMetrics[index],
+            visibleInActionBar: visible
+          };
+          
+          // Save to localStorage (frontend-only property)
+          // Save for personal context - localStorage is per-window, so each window saves its own copy
+          if (context === 'personal') {
+            saveMetricVisibility(metricId, visible);
+          }
+        }
+      },
+      prepare: (metricId, visible, context = 'personal', broadcast = false) => ({
+        payload: { metricId, visible, context, broadcast }
       })
     },
   },
@@ -285,6 +333,7 @@ export const {
   addMetric,
   updateMetric,
   removeMetric,
+  setMetricVisibility,
 } = metricsSlice.actions;
 
 export default metricsSlice.reducer;
