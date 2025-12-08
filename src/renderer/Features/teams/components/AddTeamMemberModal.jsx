@@ -51,9 +51,31 @@ const AddTeamMemberModal = ({ isOpen, onClose, team, onMemberAdded }) => {
         setRole('user');
         onMemberAdded?.(result.payload);
         onClose();
-      } else {
+      } else if (addMember.rejected.match(result)) {
         // Handle specific error messages from backend
-        const errorMessage = result.error || result.payload || 'Failed to add team member';
+        // Extract error message and ensure it's always a string to fix React error #31
+        let errorMessage = 'Failed to add team member';
+        
+        if (result.payload) {
+          // From rejectWithValue - could be string or object
+          if (typeof result.payload === 'string') {
+            errorMessage = result.payload;
+          } else if (result.payload && typeof result.payload === 'object') {
+            errorMessage = result.payload.detail || result.payload.message || String(result.payload);
+          } else {
+            errorMessage = String(result.payload);
+          }
+        } else if (result.error) {
+          // Error object
+          if (result.error instanceof Error) {
+            errorMessage = result.error.message;
+          } else if (result.error && typeof result.error === 'object') {
+            errorMessage = result.error.message || result.error.detail || String(result.error);
+          } else {
+            errorMessage = String(result.error);
+          }
+        }
+        
         setError(errorMessage);
       }
     } catch (err) {

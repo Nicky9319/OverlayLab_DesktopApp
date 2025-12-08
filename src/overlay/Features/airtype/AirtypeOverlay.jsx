@@ -26,8 +26,15 @@ const AirtypeOverlay = () => {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const abortControllerRef = useRef(null);
+  const isRecordingCancelledRef = useRef(false);
   
   const currentOverlayType = useSelector((state) => state.overlayType.currentOverlayType);
+
+  // Detect platform for shortcut display
+  const isMac = navigator.platform.toUpperCase().includes('MAC') || 
+                (window.process && window.process.platform === 'darwin');
+  const shortcutKey = isMac ? 'Option+1' : 'Ctrl+1';
 
   // Load auto-paste setting
   useEffect(() => {
@@ -84,13 +91,17 @@ const AirtypeOverlay = () => {
       }
     };
 
-    // Listen for keyboard shortcut (Ctrl+1) in overlay window
+    // Detect platform
+    const isMac = navigator.platform.toUpperCase().includes('MAC') || 
+                  (window.process && window.process.platform === 'darwin');
+
+    // Listen for keyboard shortcut (Ctrl+1 on Windows, Option+1 on macOS) in overlay window
     const handleKeyDown = (e) => {
       // Only handle if AirType overlay is active
       if (currentOverlayType !== 'airtype') return;
       
-      // Check for Ctrl+1 (or Cmd+1 on Mac)
-      if ((e.ctrlKey || e.metaKey) && e.key === '1') {
+      // Check for Ctrl+1 on Windows or Option+1 on macOS
+      if ((e.ctrlKey || (isMac && e.altKey)) && e.key === '1') {
         e.preventDefault();
         e.stopPropagation();
         
@@ -205,6 +216,12 @@ const AirtypeOverlay = () => {
       // Handle data available event - send chunks in real-time
       mediaRecorder.ondataavailable = async (event) => {
         if (event.data.size > 0) {
+          // Don't send chunks if recording was cancelled
+          if (isRecordingCancelledRef.current) {
+            console.log('Recording cancelled, skipping chunk send');
+            return;
+          }
+          
           audioChunksRef.current.push(event.data);
           
           // Send chunk to server immediately for streaming
@@ -219,8 +236,21 @@ const AirtypeOverlay = () => {
       
       // Handle recording stop
       mediaRecorder.onstop = async () => {
-        await processRecording();
+        // Only process if recording wasn't cancelled
+        if (!isRecordingCancelledRef.current) {
+          await processRecording();
+        } else {
+          // Recording was cancelled, just clean up
+          console.log('Recording was cancelled, skipping transcription - no API call made');
+          setIsProcessing(false);
+          audioChunksRef.current = [];
+          sessionIdRef.current = null;
+          isRecordingCancelledRef.current = false; // Reset flag after cleanup
+        }
       };
+      
+      // Reset cancelled flag when starting new recording
+      isRecordingCancelledRef.current = false;
       
       // Start recording with small timeslice for real-time streaming
       mediaRecorder.start(100); // Collect data every 100ms
@@ -239,8 +269,13 @@ const AirtypeOverlay = () => {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (wasCancelled = false) => {
     if (mediaRecorderRef.current && isRecording) {
+      // Mark as cancelled if applicable
+      if (wasCancelled) {
+        isRecordingCancelledRef.current = true;
+      }
+      
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setIsDetectingVoice(false);
@@ -263,18 +298,58 @@ const AirtypeOverlay = () => {
         streamRef.current = null;
       }
       
-      // Re-enable click-through when recording stops
-      if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
-        window.widgetAPI.enableClickThrough();
+      // Note: We don't re-enable click-through here because HoverComponent
+      // and the main click-through management system handle widget interactivity.
+      // Click-through should only be re-enabled on actual errors.
+      
+      console.log('Recording stopped', wasCancelled ? '(cancelled)' : '');
+    }
+  };
+
+  const cancelRecording = () => {
+    console.log('Cancelling recording/processing');
+    
+    // If currently recording, stop the recording and mark as cancelled
+    if (isRecording) {
+      console.log('Cancelling active recording - preventing transcription API call');
+      isRecordingCancelledRef.current = true;
+      stopRecording(true);
+      // Reset state immediately
+      setIsProcessing(false);
+      audioChunksRef.current = [];
+      sessionIdRef.current = null;
+      setTranscribedText('');
+      setError(null);
+      // Flag will be reset when onstop handler completes or when new recording starts
+      return;
+    }
+    
+    // If processing, abort the transcription request
+    if (isProcessing) {
+      console.log('Cancelling transcription processing');
+      // Abort ongoing fetch request if it exists
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
       
-      console.log('Recording stopped');
+      // Reset all processing-related state
+      setIsProcessing(false);
+      audioChunksRef.current = [];
+      sessionIdRef.current = null;
+      setTranscribedText('');
+      setError(null);
+      isRecordingCancelledRef.current = false;
     }
   };
 
   const processRecording = async () => {
     setIsProcessing(true);
     setError(null);
+    
+    // Create new AbortController for this request
+    abortControllerRef.current = new AbortController();
+    const currentAbortController = abortControllerRef.current;
     
     try {
       // Send final chunk to trigger transcription
@@ -286,8 +361,14 @@ const AirtypeOverlay = () => {
         
         console.log('Sending final chunk for transcription, session:', sessionIdRef.current);
         
-        // Send final chunk
-        const result = await sendAudioChunk(finalChunk, sessionIdRef.current, true);
+        // Send final chunk with abort signal
+        const result = await sendAudioChunk(finalChunk, sessionIdRef.current, true, currentAbortController.signal);
+        
+        // Check if request was aborted
+        if (result.status_code === 499) {
+          console.log('Transcription request was cancelled');
+          return;
+        }
         
         if (result.status_code === 200 && result.content.success) {
           const transcription = result.content.transcription || '';
@@ -344,12 +425,22 @@ const AirtypeOverlay = () => {
         throw new Error('No active recording session');
       }
     } catch (err) {
+      // Check if error is due to abort
+      if (err.name === 'AbortError' || (currentAbortController && currentAbortController.signal.aborted)) {
+        console.log('Transcription request was cancelled');
+        return;
+      }
       console.error('Error processing recording:', err);
       setError(err.message || 'Failed to transcribe audio');
     } finally {
-      setIsProcessing(false);
-      audioChunksRef.current = [];
-      sessionIdRef.current = null;
+      // Only reset if this is still the current request (not aborted)
+      if (abortControllerRef.current === currentAbortController) {
+        setIsProcessing(false);
+        audioChunksRef.current = [];
+        sessionIdRef.current = null;
+        abortControllerRef.current = null;
+        isRecordingCancelledRef.current = false; // Reset cancelled flag
+      }
     }
   };
 
@@ -533,72 +624,115 @@ const AirtypeOverlay = () => {
 
        {/* Status indicator badge - shows recording/processing/ready state */}
        {autoPasteEnabled && (
-         <div
-           style={{
-             position: 'absolute',
-             top: '-8px',
-             right: '-8px',
-             width: '20px',
-             height: '20px',
-             borderRadius: '50%',
-             backgroundColor: isRecording 
-               ? (isDetectingVoice ? themeColors.errorRed : themeColors.warningOrange)
-               : isProcessing 
-               ? themeColors.warningOrange 
-               : themeColors.primaryBlue,
-             border: `2px solid ${themeColors.primaryBackground}`,
-             display: 'flex',
-             alignItems: 'center',
-             justifyContent: 'center',
-             zIndex: 1001,
-             boxShadow: isRecording 
-               ? `0 2px 8px ${isDetectingVoice ? themeColors.errorRed + '80' : themeColors.warningOrange + '80'}`
-               : isProcessing
-               ? `0 2px 8px ${themeColors.warningOrange + '80'}`
-               : '0 2px 8px rgba(0, 122, 255, 0.4)',
-             animation: isRecording ? 'pulse 1.5s infinite' : 'none',
-             transition: 'all 0.3s ease',
-           }}
-           title={
-             isRecording 
-               ? (isDetectingVoice ? "Recording - Voice detected" : "Recording...")
-               : isProcessing 
-               ? "Processing transcription..."
-               : "Ready to record"
-           }
-         >
-           {isRecording ? (
-             // Recording indicator - small circle
-             <div
+         <>
+           <div
+             style={{
+               position: 'absolute',
+               top: '-8px',
+               right: '-8px',
+               width: '20px',
+               height: '20px',
+               borderRadius: '50%',
+               backgroundColor: isRecording 
+                 ? (isDetectingVoice ? themeColors.errorRed : themeColors.warningOrange)
+                 : isProcessing 
+                 ? themeColors.warningOrange 
+                 : themeColors.primaryBlue,
+               border: `2px solid ${themeColors.primaryBackground}`,
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               zIndex: 1001,
+               boxShadow: isRecording 
+                 ? `0 2px 8px ${isDetectingVoice ? themeColors.errorRed + '80' : themeColors.warningOrange + '80'}`
+                 : isProcessing
+                 ? `0 2px 8px ${themeColors.warningOrange + '80'}`
+                 : '0 2px 8px rgba(0, 122, 255, 0.4)',
+               animation: isRecording ? 'pulse 1.5s infinite' : 'none',
+               transition: 'all 0.3s ease',
+             }}
+             title={
+               isRecording 
+                 ? (isDetectingVoice ? "Recording - Voice detected" : "Recording...")
+                 : isProcessing 
+                 ? "Processing transcription..."
+                 : "Ready to record"
+             }
+           >
+             {isRecording ? (
+               // Recording indicator - small circle
+               <div
+                 style={{
+                   width: '8px',
+                   height: '8px',
+                   borderRadius: '50%',
+                   backgroundColor: themeColors.primaryText,
+                 }}
+               />
+             ) : isProcessing ? (
+               // Processing indicator - spinner
+               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                 <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="15.708" opacity="0.3" />
+                 <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="7.854" opacity="0.6">
+                   <animateTransform
+                     attributeName="transform"
+                     type="rotate"
+                     from="0 12 12"
+                     to="360 12 12"
+                     dur="1s"
+                     repeatCount="indefinite"
+                   />
+                 </circle>
+               </svg>
+             ) : (
+               // Ready indicator - checkmark
+               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                 <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill={themeColors.primaryText} />
+               </svg>
+             )}
+           </div>
+           
+           {/* Delete button - shown only during recording (not during processing) */}
+           {isRecording && (
+             <button
+               onClick={cancelRecording}
                style={{
-                 width: '8px',
-                 height: '8px',
+                 position: 'absolute',
+                 top: '-8px',
+                 right: '14px',
+                 width: '20px',
+                 height: '20px',
                  borderRadius: '50%',
-                 backgroundColor: themeColors.primaryText,
+                 backgroundColor: themeColors.errorRed,
+                 border: `2px solid ${themeColors.primaryBackground}`,
+                 color: themeColors.primaryText,
+                 cursor: 'pointer',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 zIndex: 1002,
+                 padding: 0,
+                 fontSize: '14px',
+                 lineHeight: '1',
+                 transition: 'all 0.2s ease',
+                 boxShadow: `0 2px 8px ${themeColors.errorRed + '80'}`,
                }}
-             />
-           ) : isProcessing ? (
-             // Processing indicator - spinner
-             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-               <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="15.708" opacity="0.3" />
-               <circle cx="12" cy="12" r="10" stroke={themeColors.primaryText} strokeWidth="2" strokeDasharray="31.416" strokeDashoffset="7.854" opacity="0.6">
-                 <animateTransform
-                   attributeName="transform"
-                   type="rotate"
-                   from="0 12 12"
-                   to="360 12 12"
-                   dur="1s"
-                   repeatCount="indefinite"
-                 />
-               </circle>
-             </svg>
-           ) : (
-             // Ready indicator - checkmark
-             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill={themeColors.primaryText} />
-             </svg>
+               onMouseEnter={(e) => {
+                 e.currentTarget.style.backgroundColor = '#d32f2f';
+                 e.currentTarget.style.transform = 'scale(1.1)';
+                 e.currentTarget.style.boxShadow = `0 2px 12px ${themeColors.errorRed}`;
+               }}
+               onMouseLeave={(e) => {
+                 e.currentTarget.style.backgroundColor = themeColors.errorRed;
+                 e.currentTarget.style.transform = 'scale(1)';
+                 e.currentTarget.style.boxShadow = `0 2px 8px ${themeColors.errorRed + '80'}`;
+               }}
+               title="Cancel and delete recording"
+             >
+               ×
+             </button>
            )}
-         </div>
+         </>
        )}
 
       {/* Recording indicator / Mic button */}
@@ -740,15 +874,59 @@ const AirtypeOverlay = () => {
             pointerEvents: 'auto',
             userSelect: 'text',
             WebkitUserSelect: 'text',
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
           }}
         >
-          {isRecording 
-            ? (isDetectingVoice 
-                ? '🎤 Listening... (Press Ctrl+1 to stop)' 
-                : 'Recording... (Press Ctrl+1 to stop)')
-            : isProcessing 
-            ? 'Processing...' 
-            : 'Press Ctrl+1 to record'}
+          <span>
+            {isRecording 
+              ? (isDetectingVoice 
+                  ? `🎤 Listening... (Press ${shortcutKey} to stop)` 
+                  : `Recording... (Press ${shortcutKey} to stop)`)
+              : isProcessing 
+              ? 'Processing...' 
+              : `Press ${shortcutKey} to record`}
+          </span>
+          {/* Delete button - shown only during recording (not during processing) when auto-paste is disabled */}
+          {isRecording && (
+            <button
+              onClick={cancelRecording}
+              style={{
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                backgroundColor: themeColors.errorRed,
+                border: `1px solid ${themeColors.primaryBackground}`,
+                color: themeColors.primaryText,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                fontSize: '12px',
+                lineHeight: '1',
+                transition: 'all 0.2s ease',
+                boxShadow: `0 2px 6px ${themeColors.errorRed + '80'}`,
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#d32f2f';
+                e.currentTarget.style.transform = 'scale(1.15)';
+                e.currentTarget.style.boxShadow = `0 2px 10px ${themeColors.errorRed}`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = themeColors.errorRed;
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = `0 2px 6px ${themeColors.errorRed + '80'}`;
+              }}
+              title="Cancel and delete recording"
+            >
+              ×
+            </button>
+          )}
         </div>
       )}
 
@@ -769,7 +947,7 @@ const AirtypeOverlay = () => {
             WebkitUserSelect: 'text',
           }}
         >
-          {error}
+          An error has occurred. Try again.
         </div>
       )}
 

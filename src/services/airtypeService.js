@@ -20,7 +20,7 @@ import { getClerkToken } from '../utils/clerkTokenProvider';
  * @param {boolean} isFinal - Whether this is the final chunk
  * @returns {Promise<Object>} Response with status_code and message
  */
-const sendAudioChunk = async (audioChunk, sessionId, isFinal = false) => {
+const sendAudioChunk = async (audioChunk, sessionId, isFinal = false, abortSignal = null) => {
   logger.debug('sendAudioChunk called', { chunkSize: audioChunk?.size, sessionId, isFinal });
   
   if (!audioChunk || !(audioChunk instanceof Blob)) {
@@ -57,13 +57,20 @@ const sendAudioChunk = async (audioChunk, sessionId, isFinal = false) => {
   const url = `${BASE_URL}/api/airtype-service/transcribe-chunk`;
   
   try {
-    const response = await fetch(url, {
+    const fetchOptions = {
       method: 'POST',
       headers: headers,
       body: formData,
       mode: 'cors',
       credentials: 'omit'
-    });
+    };
+    
+    // Add abort signal if provided
+    if (abortSignal) {
+      fetchOptions.signal = abortSignal;
+    }
+    
+    const response = await fetch(url, fetchOptions);
     
     let content;
     try {
@@ -93,6 +100,17 @@ const sendAudioChunk = async (audioChunk, sessionId, isFinal = false) => {
       };
     }
   } catch (error) {
+    // Check if error is due to abort
+    if (error.name === 'AbortError') {
+      logger.debug(`Request aborted for ${url}`);
+      return { 
+        status_code: 499, 
+        content: { 
+          success: false,
+          error: 'Request cancelled' 
+        } 
+      };
+    }
     logger.error(`Network error while calling ${url}`, { error: error.message });
     return { 
       status_code: 503, 
