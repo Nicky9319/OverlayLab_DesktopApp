@@ -9,6 +9,7 @@ import { setSelectedTeamId } from '../../../../store/slices/teamsSlice';
 import LeftNavBar from '../../left-navbar/left-nav-bar';
 import Leads from '../../leads/leads';
 import Buckets from '../../buckets/buckets';
+import Metrics from '../../metrics/metrics';
 import Taskbar from '../../taskbar/taskbar';
 import PersonalTeamToggle from '../../common/components/PersonalTeamToggle';
 import TeamSelection from '../../teams/components/TeamSelection';
@@ -167,10 +168,12 @@ const MainPage = () => {
             return <TeamSelection />;
         }
 
-        // Otherwise show normal content (buckets/leads/team)
+        // Otherwise show normal content (buckets/leads/metrics/team)
         switch (activeTab) {
             case 'leads':
                 return <Leads />;
+            case 'metrics':
+                return <Metrics />;
             case 'team':
                 return <TeamMembers />;
             case 'buckets':

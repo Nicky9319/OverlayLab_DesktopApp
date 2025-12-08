@@ -1507,6 +1507,17 @@ const updateMetricObjectiveCount = async (metricId, objectiveCount) => {
   });
 };
 
+/**
+ * Get all metrics for the current customer
+ * @returns {Promise<Object>} Response with status_code and content containing metrics array
+ */
+const getAllMetrics = async () => {
+  logger.info('getAllMetrics called');
+  return await request('/api/leadflow-service/metrics/get-all-metrics', {
+    method: 'GET'
+  });
+};
+
 // ============================================================================
 // EXPORTS
 // ============================================================================
@@ -1570,6 +1581,7 @@ export {
   incrementMetricCompletedCount,
   decrementMetricCompletedCount,
   getMetricHistory,
-  updateMetricObjectiveCount
+  updateMetricObjectiveCount,
+  getAllMetrics
 };
 

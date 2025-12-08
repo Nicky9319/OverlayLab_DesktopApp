@@ -5,19 +5,20 @@ const LeftNavBar = ({ activeTab, onTabChange, viewMode, selectedTeamId }) => {
     const allTabs = [
         { id: 'buckets', label: 'Buckets', icon: '🗂️' },
         { id: 'leads', label: 'Leads', icon: '👥' },
+        { id: 'metrics', label: 'Metrics', icon: '📊' },
         { id: 'team', label: 'Team', icon: '👥' }
     ];
 
     // Filter tabs based on view mode and team selection
     let tabs = [];
     if (viewMode === 'team' && selectedTeamId) {
-        // In team mode with selected team: show all tabs including Team
-        tabs = allTabs;
+        // In team mode with selected team: show all tabs including Team (but not metrics)
+        tabs = allTabs.filter(tab => tab.id !== 'metrics');
     } else if (viewMode === 'team' && !selectedTeamId) {
         // In team mode but no team selected: show no tabs (team selection page)
         tabs = [];
     } else {
-        // In customer mode: show only buckets and leads
+        // In customer mode: show buckets, leads, and metrics (not team)
         tabs = allTabs.filter(tab => tab.id !== 'team');
     }
 
