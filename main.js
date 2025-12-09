@@ -482,8 +482,8 @@ class UndetectableWidgetWindow {
     // Additional settings for better click-through behavior
     if (ignore) {
       // When click-through is enabled, ensure window doesn't steal focus
-      this.window.setFocusable(false);
-      this.window.setFocusable(true);
+      // this.window.setFocusable(false);
+      // this.window.setFocusable(true);
     }
   }
 
