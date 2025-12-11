@@ -1,6 +1,6 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session, clipboard } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session, clipboard, screen } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
@@ -970,7 +970,8 @@ async function createMainAndWidgetWindows() {
 // IPC Handle Section !!! ------------------------------------------------------------------------------------------------------
 
 // Screenshot capture and save handler
-const { nativeImage, desktopCapturer, screen } = require('electron');
+// Note: screen is already imported at the top, only need nativeImage and desktopCapturer
+const { nativeImage, desktopCapturer } = require('electron');
 
 // Global shortcut screenshot function with cooldown
 async function handleGlobalScreenshot() {

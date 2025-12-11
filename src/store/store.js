@@ -3,6 +3,7 @@ import bucketsReducer from './slices/bucketsSlice';
 import leadsReducer from './slices/leadsSlice';
 import teamsReducer from './slices/teamsSlice';
 import vaultsReducer from './slices/vaultsSlice';
+import metricsReducer from './slices/metricsSlice';
 import ipcSyncMiddleware from './middleware/ipcSyncMiddleware';
 
 export const store = configureStore({
@@ -11,6 +12,7 @@ export const store = configureStore({
     leads: leadsReducer,
     teams: teamsReducer,
     vaults: vaultsReducer,
+    metrics: metricsReducer,
     // Add other reducers as needed
   },
   middleware: (getDefaultMiddleware) =>
@@ -34,8 +36,10 @@ if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.on
     try {
       console.log('Received broadcasted Redux action:', actionData.type);
       
-      // Check if this action needs context (buckets or leads actions)
-      const needsContext = actionData.type.startsWith('buckets/') || actionData.type.startsWith('leads/');
+      // Check if this action needs context (buckets, leads, or metrics actions)
+      const needsContext = actionData.type.startsWith('buckets/') || 
+                          actionData.type.startsWith('leads/') || 
+                          actionData.type.startsWith('metrics/');
       
       // Reconstruct payload based on whether it needs context
       let payload;

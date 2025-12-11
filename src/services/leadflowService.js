@@ -1389,6 +1389,136 @@ const deleteTeamBucket = async (teamId, bucketId) => {
 };
 
 // ============================================================================
+// METRICS API
+// ============================================================================
+
+/**
+ * Add a new metric
+ * @param {string} fieldName - Name of the metric field
+ * @param {number} objectiveCount - Objective count value
+ * @param {number} backlogRemainingCount - Backlog remaining count
+ * @param {string} [metricId] - Optional metric ID (will be generated if not provided)
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const addMetric = async (fieldName, objectiveCount, backlogRemainingCount, metricId = null) => {
+  logger.info('addMetric called', { fieldName, objectiveCount, backlogRemainingCount, metricId });
+  const body = {
+    fieldName,
+    objectiveCount,
+    backlogRemainingCount
+  };
+  if (metricId) {
+    body.metricId = metricId;
+  }
+  return await request('/api/leadflow-service/metrics/add-metric', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+};
+
+/**
+ * Delete a metric
+ * @param {string} metricId - Metric ID to delete
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const deleteMetric = async (metricId) => {
+  logger.info('deleteMetric called', { metricId });
+  return await request('/api/leadflow-service/metrics/delete-metric', {
+    method: 'DELETE',
+    body: JSON.stringify({ metricId })
+  });
+};
+
+/**
+ * Update metric name
+ * @param {string} metricId - Metric ID
+ * @param {string} fieldName - New field name
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateMetricName = async (metricId, fieldName) => {
+  logger.info('updateMetricName called', { metricId, fieldName });
+  return await request('/api/leadflow-service/metrics/update-metric-name', {
+    method: 'PUT',
+    body: JSON.stringify({ metricId, fieldName })
+  });
+};
+
+/**
+ * Get latest metric information
+ * @param {string} metricId - Metric ID
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const getMetricInformation = async (metricId) => {
+  logger.info('getMetricInformation called', { metricId });
+  return await request(`/api/leadflow-service/metrics/get-metric-information?metricId=${metricId}`, {
+    method: 'GET'
+  });
+};
+
+/**
+ * Increment metric completed count
+ * @param {string} metricId - Metric ID
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const incrementMetricCompletedCount = async (metricId) => {
+  logger.info('incrementMetricCompletedCount called', { metricId });
+  return await request('/api/leadflow-service/metrics/increment-metric-completed-count', {
+    method: 'POST',
+    body: JSON.stringify({ metricId })
+  });
+};
+
+/**
+ * Decrement metric completed count
+ * @param {string} metricId - Metric ID
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const decrementMetricCompletedCount = async (metricId) => {
+  logger.info('decrementMetricCompletedCount called', { metricId });
+  return await request('/api/leadflow-service/metrics/decrement-metric-completed-count', {
+    method: 'POST',
+    body: JSON.stringify({ metricId })
+  });
+};
+
+/**
+ * Get metric history
+ * @param {string} metricId - Metric ID
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const getMetricHistory = async (metricId) => {
+  logger.info('getMetricHistory called', { metricId });
+  return await request(`/api/leadflow-service/metrics/get-metric-history?metricId=${metricId}`, {
+    method: 'GET'
+  });
+};
+
+/**
+ * Update metric objective count
+ * @param {string} metricId - Metric ID
+ * @param {number} objectiveCount - New objective count value
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateMetricObjectiveCount = async (metricId, objectiveCount) => {
+  logger.info('updateMetricObjectiveCount called', { metricId, objectiveCount });
+  return await request('/api/leadflow-service/metrics/update-metric-objective-count', {
+    method: 'PUT',
+    body: JSON.stringify({ metricId, objectiveCount })
+  });
+};
+
+/**
+ * Get all metrics for the current customer
+ * @returns {Promise<Object>} Response with status_code and content containing metrics array
+ */
+const getAllMetrics = async () => {
+  logger.info('getAllMetrics called');
+  return await request('/api/leadflow-service/metrics/get-all-metrics', {
+    method: 'GET'
+  });
+};
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -1440,5 +1570,18 @@ export {
   getAllTeamBuckets,
   updateTeamBucketName,
   deleteTeamBucket
+};
+
+// Metrics exports
+export {
+  addMetric,
+  deleteMetric,
+  updateMetricName,
+  getMetricInformation,
+  incrementMetricCompletedCount,
+  decrementMetricCompletedCount,
+  getMetricHistory,
+  updateMetricObjectiveCount,
+  getAllMetrics
 };
 
