@@ -1,6 +1,6 @@
 {
   "name": "overlaylab",
-  "version": "1.0.3",
+  "version": "1.0.9",
   "description": "Overlay Lab Desktop Application",
   "main": "./out/main/main.js",
   "author": "example.com",
@@ -13,8 +13,7 @@
     "dev:widget": "electron-vite dev --config electron.vite.config.mjs widget",
     "build": "electron-vite build",
     "build:check": "node scripts/check-env.js && electron-vite build",
-    "preinstall": "node scripts/fix-cpu-features.js || true",
-    "postinstall": "node scripts/fix-cpu-features.js && electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build:check && electron-builder --dir",
     "build:win": "npm run build:check && electron-builder --win",
     "build:mac": "npm run build:check && electron-builder --mac",
