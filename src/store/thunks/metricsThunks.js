@@ -265,3 +265,26 @@ export const decrementMetricCompleted = createAsyncThunk(
   }
 );
 
+/**
+ * Fetch metric history via API
+ */
+export const fetchMetricHistory = createAsyncThunk(
+  'metrics/fetchMetricHistory',
+  async (metricId, { rejectWithValue }) => {
+    try {
+      const response = await leadflowService.getMetricHistory(metricId);
+      
+      if (response.status_code >= 200 && response.status_code < 300) {
+        const history = response.content?.history || [];
+        return { metricId, history };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to fetch metric history';
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to fetch metric history';
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
