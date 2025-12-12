@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchMetrics, createMetric, updateMetricObjective, deleteMetric } from '../../../store/thunks/metricsThunks';
 import { setMetrics, setMetricVisibility } from '../../../store/slices/metricsSlice';
 import AddMetricModal from './components/AddMetricModal';
+import MetricMonitorView from './components/MetricMonitorView';
 
 const Metrics = () => {
     const dispatch = useDispatch();
@@ -11,6 +12,7 @@ const Metrics = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingMetricId, setEditingMetricId] = useState(null);
     const [editValue, setEditValue] = useState('');
+    const [monitoringMetricId, setMonitoringMetricId] = useState(null);
     const inputRefs = useRef({});
     
     // Use metrics directly from Redux
@@ -126,6 +128,29 @@ const Metrics = () => {
         dispatch(setMetricVisibility(metricId, newVisibility, 'personal', true));
     };
 
+    // Function to handle monitor button click
+    const handleMonitorClick = (metricId) => {
+        setMonitoringMetricId(metricId);
+    };
+
+    // Function to handle back from monitor view
+    const handleBackFromMonitor = () => {
+        setMonitoringMetricId(null);
+    };
+
+    // If monitoring, show monitor view
+    if (monitoringMetricId) {
+        const monitoringMetric = metricsArray.find((m) => (m.metricId || m.id) === monitoringMetricId);
+        const metricName = monitoringMetric?.fieldName || 'Unknown Metric';
+        return (
+            <MetricMonitorView
+                metricId={monitoringMetricId}
+                metricName={metricName}
+                onBack={handleBackFromMonitor}
+            />
+        );
+    }
+
     return (
         <div className="p-5 max-w-6xl mx-auto bg-black min-h-screen">
             <div className="mb-8">
@@ -195,10 +220,19 @@ const Metrics = () => {
                                 key={metricId || `metric-${index}`}
                                 className="bg-[#111111] border border-[#1C1C1E] rounded-xl p-5 transition-all duration-200 shadow-[0_2px_4px_rgba(0,0,0,0.3)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.5)] hover:-translate-y-0.5 hover:border-[#3A3A3C] flex flex-col"
                             >
-                                {/* Header with title, eye icon, and delete icon */}
+                                {/* Header with title, eye icon, monitor icon, and delete icon */}
                                 <div className="flex items-start justify-between mb-4">
                                     <h3 className="text-lg font-semibold text-white flex-1 pr-2">{fieldName}</h3>
                                     <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleMonitorClick(metricId)}
+                                            className="p-1.5 text-[#8E8E93] hover:text-[#007AFF] hover:bg-[#1C1C1E] rounded-lg transition-all duration-200 flex-shrink-0"
+                                            title="Monitor metric history"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                        </button>
                                         <button
                                             onClick={() => handleToggleVisibility(metricId, visibleInActionBar)}
                                             className={`p-1.5 rounded-lg transition-all duration-200 flex-shrink-0 ${

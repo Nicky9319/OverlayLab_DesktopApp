@@ -406,10 +406,9 @@ class UndetectableWidgetWindow {
           this.window.setIgnoreMouseEvents(true, { forward: true });
         }
         this.window.setAlwaysOnTop(true, 'screen-saver');
-        // Force focus and bring to front
+        // Ensure window stays on top without stealing focus
         setTimeout(() => {
           if (this.window && !this.window.isDestroyed()) {
-            this.window.focus();
             this.window.setAlwaysOnTop(false); // Reset
             this.window.setAlwaysOnTop(true, 'screen-saver'); // Re-apply
           }
