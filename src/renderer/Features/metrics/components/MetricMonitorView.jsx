@@ -4,6 +4,8 @@ import { fetchMetricHistory } from '../../../../store/thunks/metricsThunks';
 import { parseISO, isAfter, isBefore, isSameDay } from 'date-fns';
 import MetricHistoryChart from './MetricHistoryChart';
 import TimeFrameSelector from './TimeFrameSelector';
+import * as leadflowService from '../../../../services/leadflowService';
+import { updateMetric as updateMetricAction } from '../../../../store/slices/metricsSlice';
 
 const MetricMonitorView = ({ metricId, metricName, onBack }) => {
   const dispatch = useDispatch();
@@ -11,11 +13,46 @@ const MetricMonitorView = ({ metricId, metricName, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeFrame, setTimeFrame] = useState(null);
+  const [todayTrackingData, setTodayTrackingData] = useState(null);
 
   // Get metric data to access objectiveUpdates
   const metricsState = useSelector((state) => state.metrics?.personal || { metrics: [] });
   const metric = metricsState.metrics?.find((m) => (m.metricId || m.id) === metricId);
   const objectiveUpdates = metric?.objectiveUpdates || [];
+  
+  // Get today's tracking data for backlog and objective display
+  useEffect(() => {
+    const loadTodayTrackingData = async () => {
+      if (!metricId) return;
+      
+      try {
+        const metricInfoResponse = await leadflowService.getMetricInformation(metricId);
+        
+        if (metricInfoResponse.status_code >= 200 && metricInfoResponse.status_code < 300) {
+          const metricInfo = metricInfoResponse.content;
+          const metricData = metricInfo?.metric || metricInfo;
+          
+          setTodayTrackingData({
+            backlogCount: metricData?.BacklogCount ?? 0,
+            objectiveCount: metricData?.ObjectiveCount ?? 0,
+            completedCount: metricData?.CompletedCount ?? 0
+          });
+          
+          // Also update Redux state
+          dispatch(updateMetricAction(metricId, {
+            backlogCount: metricData?.BacklogCount ?? 0,
+            objectiveCount: metricData?.ObjectiveCount ?? 0,
+            completedCount: metricData?.CompletedCount ?? 0,
+            date: metricData?.Date ?? null
+          }, 'personal', true));
+        }
+      } catch (err) {
+        console.error('Error loading today\'s tracking data:', err);
+      }
+    };
+    
+    loadTodayTrackingData();
+  }, [metricId, dispatch]);
 
   // Fetch history on mount and when metricId changes
   useEffect(() => {
@@ -84,6 +121,26 @@ const MetricMonitorView = ({ metricId, metricName, onBack }) => {
               <h2 className="text-3xl font-semibold text-white">{metricName || 'Metric History'}</h2>
             </div>
             <p className="text-base text-gray-400">Monitor and analyze your metric performance over time</p>
+            
+            {/* Today's Backlog and Total Objective */}
+            {todayTrackingData && (
+              <div className="flex items-center gap-6 mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">Backlog:</span>
+                  <span className="text-lg font-semibold text-white">{todayTrackingData.backlogCount}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">Total Objective:</span>
+                  <span className="text-lg font-semibold text-white">
+                    {todayTrackingData.backlogCount + todayTrackingData.objectiveCount}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-400">Today's Objective:</span>
+                  <span className="text-lg font-semibold text-white">{todayTrackingData.objectiveCount}</span>
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="flex items-center gap-3">

@@ -40,12 +40,15 @@ export const fetchMetrics = createAsyncThunk(
             metricId,
             customerId: metric.customerId || metric.customer_id,
             fieldName: metric.fieldName || metric.field_name || '',
-            objectiveCount: metric.objectiveCount || metric.objective_count || 0,
+            objectiveCount: metric.objectiveCount || metric.objective_count || 0, // From daily_metrics (base)
             backlogRemainingCount: metric.backlogRemainingCount || metric.backlog_remaining_count || 0,
             objectiveUpdates: Array.isArray(metric.objectiveUpdates) ? metric.objectiveUpdates : [],
             completedCount: metric.completedCount !== undefined ? metric.completedCount : 0,
+            // Fields from metric_tracking (today's record) - these will be set when getMetricInformation is called
+            backlogCount: metric.backlogCount !== undefined ? metric.backlogCount : undefined,
+            date: metric.date || metric.Date || undefined,
             visibleInActionBar,
-            ...metric // Preserve other fields
+            ...metric // Preserve other fields (including tracking objectiveCount if present)
           };
         });
         
@@ -180,20 +183,30 @@ export const incrementMetricCompleted = createAsyncThunk(
         
         if (metricInfoResponse.status_code >= 200 && metricInfoResponse.status_code < 300) {
           const metricInfo = metricInfoResponse.content;
+          const metricData = metricInfo?.metric || metricInfo;
           
-          // Update the metric with new completed count if available
-          if (metricInfo?.CompletedCount !== undefined || metricInfo?.metric?.CompletedCount !== undefined) {
-            const completedCount = metricInfo.CompletedCount ?? metricInfo.metric?.CompletedCount ?? 0;
-            // Update Redux state with new completed count
-            dispatch(updateMetricAction(metricId, { 
-              completedCount 
-            }, 'personal', true));
-            return { 
-              metricId, 
-              completedCount,
-              metricInfo 
-            };
-          }
+          // Extract all fields from metric_tracking record
+          const completedCount = metricData?.CompletedCount ?? 0;
+          const objectiveCount = metricData?.ObjectiveCount ?? 0;
+          const backlogCount = metricData?.BacklogCount ?? 0;
+          const date = metricData?.Date ?? null;
+          
+          // Update Redux state with all metric tracking fields
+          dispatch(updateMetricAction(metricId, { 
+            completedCount,
+            objectiveCount, // Today's objective from metric_tracking
+            backlogCount, // Backlog remaining from metric_tracking
+            date // Date for which this information is valid
+          }, 'personal', true));
+          
+          return { 
+            metricId, 
+            completedCount,
+            objectiveCount,
+            backlogCount,
+            date,
+            metricInfo 
+          };
         }
         
         // Fallback: try to get from response (increment/decrement returns { message, metric: { CompletedCount, ... } })
@@ -230,20 +243,30 @@ export const decrementMetricCompleted = createAsyncThunk(
         
         if (metricInfoResponse.status_code >= 200 && metricInfoResponse.status_code < 300) {
           const metricInfo = metricInfoResponse.content;
+          const metricData = metricInfo?.metric || metricInfo;
           
-          // Update the metric with new completed count if available
-          if (metricInfo?.CompletedCount !== undefined || metricInfo?.metric?.CompletedCount !== undefined) {
-            const completedCount = metricInfo.CompletedCount ?? metricInfo.metric?.CompletedCount ?? 0;
-            // Update Redux state with new completed count
-            dispatch(updateMetricAction(metricId, { 
-              completedCount 
-            }, 'personal', true));
-            return { 
-              metricId, 
-              completedCount,
-              metricInfo 
-            };
-          }
+          // Extract all fields from metric_tracking record
+          const completedCount = metricData?.CompletedCount ?? 0;
+          const objectiveCount = metricData?.ObjectiveCount ?? 0;
+          const backlogCount = metricData?.BacklogCount ?? 0;
+          const date = metricData?.Date ?? null;
+          
+          // Update Redux state with all metric tracking fields
+          dispatch(updateMetricAction(metricId, { 
+            completedCount,
+            objectiveCount, // Today's objective from metric_tracking
+            backlogCount, // Backlog remaining from metric_tracking
+            date // Date for which this information is valid
+          }, 'personal', true));
+          
+          return { 
+            metricId, 
+            completedCount,
+            objectiveCount,
+            backlogCount,
+            date,
+            metricInfo 
+          };
         }
         
         // Fallback: try to get from response (increment/decrement returns { message, metric: { CompletedCount, ... } })
