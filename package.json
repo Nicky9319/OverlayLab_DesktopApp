@@ -16,7 +16,7 @@
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build:check && electron-builder --dir",
     "build:win": "npm run build:check && electron-builder --win",
-    "build:mac": "npm run build:check && electron-builder --mac",
+    "build:mac": "npm run build:check && electron-builder --mac --universal",
     "build:linux": "npm run build:check && electron-builder --linux"
   },
   "dependencies": {
