@@ -8,7 +8,6 @@ protocols:
 
 directories:
   buildResources: build
-
 icon: resources/icon.png
 files:
   - '!**/.vscode/*'
@@ -50,10 +49,8 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-
 removePackageScripts: true
 removePackageKeywords: true
-
 publish:
   provider: github
   owner: Nicky9319
