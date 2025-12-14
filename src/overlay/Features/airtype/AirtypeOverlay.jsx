@@ -465,6 +465,13 @@ const AirtypeOverlay = () => {
     // Only close the text modal, not the entire widget
     setTranscribedText('');
     setError(null);
+    
+    // Re-enable click-through when text is closed and recording/processing is inactive
+    if (!isRecording && !isProcessing) {
+      if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+        window.widgetAPI.enableClickThrough();
+      }
+    }
   };
 
   // Drag functionality

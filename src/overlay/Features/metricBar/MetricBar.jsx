@@ -14,6 +14,9 @@ const MetricBar = () => {
   // Get view mode - hide widget in team mode
   const viewMode = useSelector((state) => state.teams?.viewMode || 'customer');
   
+  // Get overlay selector state to adjust z-index
+  const selectorIsOpen = useSelector((state) => state.overlaySelector?.isOpen || false);
+  
   // Filter metrics to show only those with visibleInActionBar: true
   // This will automatically update when Redux state changes (when eye icon is toggled)
   const visibleMetrics = Array.isArray(metrics) ? metrics.filter(m => m.visibleInActionBar === true) : [];
@@ -418,6 +421,9 @@ const MetricBar = () => {
   //   return null;
   // }
   
+  // Calculate dynamic z-index: always lower than overlay selector (z-index 10000)
+  const metricBarZIndex = 9999;
+  
   return (
     <HoverComponent>
       <style>
@@ -458,7 +464,7 @@ const MetricBar = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: '6px',
-          zIndex: 10001,
+          zIndex: metricBarZIndex,
           cursor: isDragging ? 'grabbing' : 'grab',
           boxShadow: '0 6px 24px rgba(0, 0, 0, 0.4)',
           pointerEvents: 'auto',
