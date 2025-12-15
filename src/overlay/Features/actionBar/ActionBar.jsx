@@ -153,6 +153,12 @@ const ActionBar = () => {
         }, 2000);
       } else if (eventName === 'screenshot-error' && payload && !payload.success) {
         console.log('ActionBar: Global screenshot failed:', payload.error);
+        // Show user-friendly error message for permission issues
+        if (payload.permissionDenied) {
+          const errorMsg = payload.error || 'Screen recording permission is required. Please grant permission in System Preferences > Security & Privacy > Screen Recording.';
+          alert(errorMsg);
+          console.error('Screenshot permission denied:', errorMsg);
+        }
         setScreenshotStatus('ready');
         setGlobalShortcutFeedback(false);
       } else if (eventName === 'validate-screenshot-request' && payload) {
@@ -1257,22 +1263,39 @@ const ActionBar = () => {
         const result = await screenshotAPI.captureAndSaveScreenshot();
         console.log('Screenshot captured and saved successfully.', result);
         
+        // Check for permission errors
+        if (!result.success && result.permissionDenied) {
+          const errorMsg = result.error || 'Screen recording permission is required. Please grant permission in System Preferences > Security & Privacy > Screen Recording.';
+          alert(errorMsg);
+          console.error('Screenshot permission denied:', errorMsg);
+          setScreenshotStatus('ready');
+          return;
+        }
+        
         // Process the image data directly from the IPC response
         if (result.success && result.imageData) {
           console.log('ActionBar: Processing image data from button click');
           processScreenshotInOverlay(result.imageData, result.resolution);
-        }
-        
-        // Set status to success (green)
-        setScreenshotStatus('success');
-        
-        // After 2.5 seconds, reset to ready (grey)
-        setTimeout(() => {
+          
+          // Set status to success (green)
+          setScreenshotStatus('success');
+          
+          // After 2.5 seconds, reset to ready (grey)
+          setTimeout(() => {
+            setScreenshotStatus('ready');
+          }, 2500);
+        } else if (!result.success) {
+          // Handle other errors
+          const errorMsg = result.error || 'Failed to capture screenshot';
+          console.error('Screenshot capture failed:', errorMsg);
+          alert(`Screenshot failed: ${errorMsg}`);
           setScreenshotStatus('ready');
-        }, 2500);
+        }
         
       } catch (err) {
         console.error('Failed to capture or save screenshot:', err);
+        const errorMsg = err.message || 'An unexpected error occurred while capturing screenshot';
+        alert(`Screenshot error: ${errorMsg}`);
         
         // On error, reset to ready after a short delay
         setTimeout(() => {

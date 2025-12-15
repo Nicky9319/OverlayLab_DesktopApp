@@ -180,6 +180,20 @@ const FloatingWidget = () => {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top
     });
+    
+    // Disable click-through when dragging starts (important for macOS)
+    // This allows the window to receive mouse events during drag
+    try {
+      if (window && window.widgetAPI && window.widgetAPI.disableClickThrough) {
+        window.widgetAPI.disableClickThrough();
+        console.log('FloatingWidget: Disabled click-through for dragging');
+      } else if (window && window.electronAPI && window.electronAPI.setIgnoreMouseEvents) {
+        window.electronAPI.setIgnoreMouseEvents(false);
+        console.log('FloatingWidget: Disabled click-through for dragging (via electronAPI)');
+      }
+    } catch (error) {
+      console.error('FloatingWidget: Error disabling click-through for drag:', error);
+    }
   };
 
   const handleMouseMove = (e) => {
@@ -221,6 +235,23 @@ const FloatingWidget = () => {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    
+    // Re-enable click-through after drag ends (important for macOS)
+    // Use a small delay to allow click events to process first
+    setTimeout(() => {
+      try {
+        if (window && window.widgetAPI && window.widgetAPI.enableClickThrough) {
+          window.widgetAPI.enableClickThrough();
+          console.log('FloatingWidget: Re-enabled click-through after drag');
+        } else if (window && window.electronAPI && window.electronAPI.setIgnoreMouseEvents) {
+          window.electronAPI.setIgnoreMouseEvents(true);
+          console.log('FloatingWidget: Re-enabled click-through after drag (via electronAPI)');
+        }
+      } catch (error) {
+        console.error('FloatingWidget: Error re-enabling click-through after drag:', error);
+      }
+    }, 50); // Small delay to allow click events to process
+    
     // Reset hasDragged after a short delay to allow click to be processed
     setTimeout(() => {
       setHasDragged(false);

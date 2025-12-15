@@ -1,6 +1,6 @@
 // Imports and modules !!! ---------------------------------------------------------------------------------------------------
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session, clipboard, screen } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut, contextBridge, Tray, Menu, Notification, session, clipboard, screen, systemPreferences } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from './resources/icon.png?asset'
@@ -292,7 +292,9 @@ class UndetectableWidgetWindow {
     this.devToolsOpen = false;
     
     // Create widget window with undetectability features
-    this.window = new BrowserWindow({
+    // macOS-specific: Don't use "panel" type as it has restrictive visibility
+    // Use undefined type for macOS to ensure proper visibility
+    const windowOptions = {
       width: 1920,
       height: 1080,
       frame: false,
@@ -300,16 +302,12 @@ class UndetectableWidgetWindow {
       skipTaskbar: true, // Always hide from taskbar/Alt+Tab
       resizable: false,
       transparent: true,
-      focusable: false,
       hasShadow: false,
       show: false, // Don't show initially
-      fullscreen: true,
-      type: isWindows ? "toolbar" : "panel", // Windows: toolbar type hides from Alt+Tab
       roundedCorners: false,
       minimizable: false,
       maximizable: false,
       closable: false,
-      hiddenInMissionControl: true, // macOS: hide from Mission Control
       webPreferences: {
         preload: join(__dirname, '../preload/preload.js'),
         sandbox: false,
@@ -317,7 +315,29 @@ class UndetectableWidgetWindow {
         devTools: true,
         nodeIntegration: false,
       }
-    });
+    };
+
+    // Platform-specific window configuration
+    if (isWindows) {
+      windowOptions.type = "toolbar"; // Windows: toolbar type hides from Alt+Tab
+      windowOptions.fullscreen = true;
+      windowOptions.focusable = false;
+    } else if (isMac) {
+      // macOS: Use undefined type instead of "panel" for better visibility
+      // Panel windows on macOS have restricted visibility behavior
+      windowOptions.type = undefined;
+      windowOptions.fullscreen = true;
+      windowOptions.focusable = true; // Set to true initially, will be set to false after showing
+      windowOptions.hiddenInMissionControl = true; // macOS: hide from Mission Control
+      windowOptions.acceptsFirstMouse = true; // Better mouse event handling on macOS
+    } else {
+      // Linux fallback
+      windowOptions.type = undefined;
+      windowOptions.fullscreen = true;
+      windowOptions.focusable = false;
+    }
+
+    this.window = new BrowserWindow(windowOptions);
 
     // Set content protection based on isRecorded
     // If isRecorded is false, prevent recording (setContentProtection(true))
@@ -331,6 +351,11 @@ class UndetectableWidgetWindow {
     // Platform-specific settings
     if (isWindows) {
       this.window.setAlwaysOnTop(true, "screen-saver", 1);
+      this.window.webContents.setBackgroundThrottling(false);
+    } else if (isMac) {
+      // macOS: Use 'floating' level instead of 'screen-saver' for better compatibility
+      // 'screen-saver' level may not work correctly on macOS
+      this.window.setAlwaysOnTop(true, "floating", 1);
       this.window.webContents.setBackgroundThrottling(false);
     }
 
@@ -390,27 +415,45 @@ class UndetectableWidgetWindow {
         // Ensure skipTaskbar is set
         this.window.setSkipTaskbar(true);
         this.window.hide();
-        if (!this.devToolsOpen) {
-          console.log('setIgnoreMouseEvents toggled: true');
-          this.window.setIgnoreMouseEvents(true, { forward: true });
+        // Set alwaysOnTop with platform-specific level
+        if (isWindows) {
+          this.window.setAlwaysOnTop(true, 'screen-saver');
+        } else if (isMac) {
+          this.window.setAlwaysOnTop(true, 'floating');
+        } else {
+          this.window.setAlwaysOnTop(true);
         }
-        this.window.setAlwaysOnTop(true, 'screen-saver');
+        // Don't set click-through here - wait until window is actually shown
       }
     });
 
     this.window.on('show', () => {
       logger.debug('Widget window shown, ensuring click-through');
       if (this.window && !this.window.isDestroyed()) {
-        if (!this.devToolsOpen) {
-          console.log('setIgnoreMouseEvents toggled: true');
-          this.window.setIgnoreMouseEvents(true, { forward: true });
+        // macOS-specific: Set focusable to false after showing for proper click-through behavior
+        if (isMac) {
+          this.window.setFocusable(false);
         }
-        this.window.setAlwaysOnTop(true, 'screen-saver');
+        
+        // Set alwaysOnTop with platform-specific level
+        const alwaysOnTopLevel = isWindows ? 'screen-saver' : (isMac ? 'floating' : 'normal');
+        this.window.setAlwaysOnTop(true, alwaysOnTopLevel);
+        
+        // Apply click-through after window is shown (important for macOS)
+        if (!this.devToolsOpen) {
+          setTimeout(() => {
+            if (this.window && !this.window.isDestroyed()) {
+              console.log('setIgnoreMouseEvents toggled: true');
+              this.window.setIgnoreMouseEvents(true, { forward: true });
+            }
+          }, isMac ? 100 : 50); // Slightly longer delay for macOS
+        }
+        
         // Ensure window stays on top without stealing focus
         setTimeout(() => {
           if (this.window && !this.window.isDestroyed()) {
             this.window.setAlwaysOnTop(false); // Reset
-            this.window.setAlwaysOnTop(true, 'screen-saver'); // Re-apply
+            this.window.setAlwaysOnTop(true, alwaysOnTopLevel); // Re-apply
           }
         }, 50);
       }
@@ -418,7 +461,8 @@ class UndetectableWidgetWindow {
 
     this.window.on('focus', () => {
       if (this.window && !this.window.isDestroyed()) {
-        this.window.setAlwaysOnTop(true, 'screen-saver');
+        const alwaysOnTopLevel = isWindows ? 'screen-saver' : (isMac ? 'floating' : 'normal');
+        this.window.setAlwaysOnTop(true, alwaysOnTopLevel);
       }
     });
 
@@ -508,12 +552,24 @@ class UndetectableWidgetWindow {
     // Ensure skipTaskbar is set before showing
     this.window.setSkipTaskbar(true);
     
-    // Windows-specific: Additional measures to stay hidden from Alt+Tab
+    // Platform-specific: Set alwaysOnTop before showing
     if (isWindows) {
       this.window.setAlwaysOnTop(true, "screen-saver", 1);
+    } else if (isMac) {
+      this.window.setAlwaysOnTop(true, "floating", 1);
     }
     
+    // Show the window first
     this.window.show();
+    
+    // macOS-specific: Ensure focusable is set correctly after showing
+    if (isMac) {
+      setTimeout(() => {
+        if (this.window && !this.window.isDestroyed()) {
+          this.window.setFocusable(false);
+        }
+      }, 50);
+    }
   }
 
   hide() {
@@ -833,11 +889,18 @@ async function createWidgetWindow() {
       try {
         widgetWindow.show();
         // Set up proper overlay behavior
+        // macOS: Wait longer to ensure window is fully visible before applying click-through
+        const delay = isMac ? 200 : 500;
         setTimeout(() => {
           if (widgetWindow && !widgetWindow.isDestroyed()) {
+            // Set alwaysOnTop with platform-specific level
+            const alwaysOnTopLevel = isWindows ? 'screen-saver' : (isMac ? 'floating' : 'normal');
+            widgetWindow.window.setAlwaysOnTop(true, alwaysOnTopLevel);
+            
+            // Apply click-through after window is shown
             console.log('setIgnoreMouseEvents toggled: true');
             widgetWindow.setIgnoreMouseEvents(true, { forward: true });
-            widgetWindow.window.setAlwaysOnTop(true);
+            
             logger.debug('Widget window shown and configured for overlay mode');
             
             // Send saved overlay type to widget window
@@ -1103,10 +1166,107 @@ async function handleGlobalScreenshot() {
   }
 }
 
+// Check and request screenshot permissions (macOS only)
+async function checkScreenshotPermission() {
+  // Only check permissions on macOS
+  if (!isMac) {
+    return { granted: true, message: 'Permission check not required on this platform' };
+  }
+
+  try {
+    // Check current permission status
+    const status = systemPreferences.getMediaAccessStatus('screen');
+    console.log(`[Screenshot] Screen recording permission status: ${status}`);
+    logger.info(`Screenshot permission status: ${status}`);
+
+    if (status === 'granted') {
+      return { granted: true, message: 'Screen recording permission granted' };
+    }
+
+    if (status === 'not-determined') {
+      // Request permission automatically
+      console.log('[Screenshot] Requesting screen recording permission...');
+      logger.info('Requesting screen recording permission');
+      const granted = await systemPreferences.askForMediaAccess('screen');
+      
+      if (granted) {
+        console.log('[Screenshot] Screen recording permission granted');
+        logger.info('Screen recording permission granted');
+        return { granted: true, message: 'Screen recording permission granted' };
+      } else {
+        console.log('[Screenshot] Screen recording permission denied');
+        logger.warn('Screen recording permission denied');
+        return { 
+          granted: false, 
+          message: 'Screen recording permission denied. Please grant permission in System Preferences > Security & Privacy > Screen Recording.',
+          status: 'denied'
+        };
+      }
+    }
+
+    if (status === 'denied') {
+      return { 
+        granted: false, 
+        message: 'Screen recording permission denied. Please grant permission in System Preferences > Security & Privacy > Screen Recording.',
+        status: 'denied'
+      };
+    }
+
+    if (status === 'restricted') {
+      return { 
+        granted: false, 
+        message: 'Screen recording permission is restricted. Please contact your system administrator.',
+        status: 'restricted'
+      };
+    }
+
+    return { granted: false, message: `Unknown permission status: ${status}`, status };
+  } catch (error) {
+    console.error('[Screenshot] Error checking permission:', error);
+    logger.error('Error checking screenshot permission', { error: error.message });
+    return { granted: false, message: `Error checking permission: ${error.message}` };
+  }
+}
+
 // Extracted screenshot capture logic for reuse
 async function captureScreenshot() {
   try {
     console.log('[Screenshot] captureScreenshot function called.');
+    
+    // Check permissions on macOS before attempting capture
+    if (isMac) {
+      const permissionCheck = await checkScreenshotPermission();
+      if (!permissionCheck.granted) {
+        const errorMessage = permissionCheck.message || 'Screen recording permission is required';
+        console.error(`[Screenshot] Permission denied: ${errorMessage}`);
+        logger.error('Screenshot capture failed due to missing permission', { message: errorMessage });
+        
+        // Send error notification to widget window if it exists
+        if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+          try {
+            widgetWindow.window.webContents.send('eventFromMain', {
+              eventName: 'screenshot-error',
+              payload: { 
+                success: false, 
+                error: errorMessage,
+                permissionDenied: true,
+                status: permissionCheck.status
+              }
+            });
+          } catch (sendError) {
+            console.warn('Failed to send permission error notification to widget:', sendError);
+          }
+        }
+        
+        return { 
+          success: false, 
+          error: errorMessage,
+          permissionDenied: true,
+          status: permissionCheck.status
+        };
+      }
+      console.log('[Screenshot] Permission check passed, proceeding with capture');
+    }
     
     // Get the primary display dimensions
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -1119,7 +1279,10 @@ async function captureScreenshot() {
       thumbnailSize: { width: width, height: height }
     });
     if (!sources.length) {
-      throw new Error('No screens found');
+      const errorMsg = isMac 
+        ? 'No screens found. This may indicate a permission issue. Please check System Preferences > Security & Privacy > Screen Recording.'
+        : 'No screens found';
+      throw new Error(errorMsg);
     }
     
     // Use the first screen (primary screen)
@@ -1767,11 +1930,13 @@ ipcMain.handle('widget:setIgnoreMouseEvents', async (event, ignore, options) => 
     if (widgetWindow && !widgetWindow.isDestroyed()) {
       // Handle the options parameter safely
       if (ignore) {
-        // When enabling click-through, use forward: true
+        // When enabling click-through, use forward: true (important for macOS)
         console.log('setIgnoreMouseEvents toggled: true');
-        widgetWindow.setIgnoreMouseEvents(true, { forward: true });
+        const opts = options && typeof options === 'object' ? options : { forward: true };
+        widgetWindow.setIgnoreMouseEvents(true, opts);
       } else {
-        // When disabling click-through, just pass false
+        // When disabling click-through (e.g., during drag), just pass false
+        // This allows the window to receive mouse events
         console.log('setIgnoreMouseEvents toggled: false');
         widgetWindow.setIgnoreMouseEvents(false);
       }
@@ -1782,6 +1947,7 @@ ipcMain.handle('widget:setIgnoreMouseEvents', async (event, ignore, options) => 
     }
   } catch (error) {
     console.error('Error setting ignore mouse events:', error);
+    logger.error('Error setting ignore mouse events', { error: error.message });
     return false;
   }
 });
