@@ -4,12 +4,14 @@ import HoverComponent from '../common/components/HoverComponent';
 import { themeColors } from '../common/utils/colors';
 import { 
   toggleAllWidgets, 
-  clearMessageCount
+  clearMessageCount,
+  setActionBarCollapsed
 } from '../../store/slices/uiVisibilitySlice';
 import { setPosition } from '../../store/slices/floatingWidgetSlice';
 
 const FloatingWidget = () => {
   const messageCount = useSelector((state) => state.uiVisibility.messageCount);
+  const actionBarCollapsed = useSelector((state) => state.uiVisibility.actionBarCollapsed);
   const position = useSelector((state) => state.floatingWidget.position);
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
@@ -19,6 +21,7 @@ const FloatingWidget = () => {
   const [screenshotAnimation, setScreenshotAnimation] = useState('idle'); // 'idle', 'processing', 'success'
   const [leadProcessingStatus, setLeadProcessingStatus] = useState('idle'); // 'idle', 'processing', 'success', 'error'
   const dispatch = useDispatch();
+
 
   // Debug: Log when component mounts
   useEffect(() => {
@@ -155,6 +158,13 @@ const FloatingWidget = () => {
 
   const handleMouseLeave = () => {
     setIsHovered(false);
+  };
+
+  // Handle toggle button click
+  const handleToggleActionBar = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dispatch(setActionBarCollapsed(!actionBarCollapsed));
   };
 
   // Drag functionality
@@ -447,6 +457,63 @@ const FloatingWidget = () => {
                   zIndex: 1
                 }}
               />
+
+              {/* Toggle button for ActionBar collapse/expand */}
+              <button
+                onClick={handleToggleActionBar}
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  bottom: '2px',
+                  right: '2px',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: themeColors.surfaceBackground,
+                  border: `1px solid ${themeColors.borderColor}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  zIndex: 10,
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'auto'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = themeColors.hoverBackground;
+                  e.target.style.transform = 'scale(1.1)';
+                  e.target.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = themeColors.surfaceBackground;
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
+                }}
+                title={actionBarCollapsed ? 'Expand Action Bar' : 'Collapse Action Bar'}
+              >
+                <svg 
+                  width="8" 
+                  height="8" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke={themeColors.primaryText} 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  style={{
+                    transform: actionBarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease'
+                  }}
+                >
+                  {actionBarCollapsed ? (
+                    <polyline points="18,15 12,9 6,15"></polyline>
+                  ) : (
+                    <polyline points="6,9 12,15 18,9"></polyline>
+                  )}
+                </svg>
+              </button>
             </div>
           </HoverComponent>
         </div>
