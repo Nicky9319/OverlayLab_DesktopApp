@@ -303,44 +303,38 @@ const getAllLeads = async (bucketId = null) => {
   return [];
 };
 
+// ============================================================================
+// COLLECTIVE SESSION FUNCTIONS (New Two-Step Lead Processing Flow)
+// ============================================================================
+
 /**
- * Add lead by uploading an image file
+ * Add an image to the collective session for later processing
  * @param {File} imageFile - Image file to upload
- * @param {string|null} bucketId - Optional bucket ID to assign the lead to
  * @returns {Promise<Object>} Response with status_code and content
  */
-const addLead = async (imageFile, bucketId = null) => {
-  console.log('🔄 leadflowService.addLead called with:', {
+const addImageToCollectiveSession = async (imageFile) => {
+  console.log('🔄 leadflowService.addImageToCollectiveSession called with:', {
     fileName: imageFile?.name,
     fileSize: imageFile?.size,
-    fileType: imageFile?.type,
-    bucketId: bucketId
+    fileType: imageFile?.type
   });
-  logger.info('addLead called', { 
+  logger.info('addImageToCollectiveSession called', { 
     fileName: imageFile?.name, 
     fileSize: imageFile?.size, 
-    fileType: imageFile?.type, 
-    bucketId 
+    fileType: imageFile?.type
   });
 
   if (!imageFile) {
-    console.error('❌ leadflowService.addLead: No image file provided');
-    logger.error('addLead: No image file provided');
+    console.error('❌ leadflowService.addImageToCollectiveSession: No image file provided');
+    logger.error('addImageToCollectiveSession: No image file provided');
     return { status_code: 400, content: { detail: 'Image file is required' } };
   }
 
   try {
     // Validate file before creating FormData
     if (!imageFile || imageFile.size === 0) {
-      console.error('❌ leadflowService.addLead: Image file is empty or invalid', {
-        hasFile: !!imageFile,
-        fileSize: imageFile?.size || 0,
-        fileName: imageFile?.name || 'unknown'
-      });
-      logger.error('addLead: Image file is empty or invalid', {
-        hasFile: !!imageFile,
-        fileSize: imageFile?.size || 0
-      });
+      console.error('❌ leadflowService.addImageToCollectiveSession: Image file is empty or invalid');
+      logger.error('addImageToCollectiveSession: Image file is empty or invalid');
       return { status_code: 400, content: { detail: 'Image file is empty or invalid' } };
     }
     
@@ -348,29 +342,15 @@ const addLead = async (imageFile, bucketId = null) => {
     const formData = new FormData();
     formData.append('file', imageFile);
     
-    // Verify file was added to FormData
     console.log('📋 FormData created with file:', {
       fileName: imageFile.name,
       fileSize: imageFile.size,
       fileType: imageFile.type
     });
-    
-    // Add bucket_id if provided
-    if (bucketId) {
-      formData.append('bucket_id', bucketId);
-      console.log('✅ leadflowService.addLead: Added bucket_id to FormData:', bucketId);
-      logger.debug('addLead: Added bucket_id to FormData', { bucketId });
-    }
 
-    const url = `${BASE_URL}/api/leadflow-service/leads/add-lead`;
-    console.log('📤 leadflowService.addLead: Making request to:', url);
-    console.log('📦 Request payload:', {
-      hasFormData: !!formData,
-      fileSize: imageFile.size,
-      fileName: imageFile.name,
-      bucketId: bucketId || 'none'
-    });
-    logger.debug('addLead: Making POST request', { url, fileSize: imageFile.size });
+    const url = `${BASE_URL}/api/leadflow-service/collective-sessions/add-image`;
+    console.log('📤 leadflowService.addImageToCollectiveSession: Making request to:', url);
+    logger.debug('addImageToCollectiveSession: Making POST request', { url, fileSize: imageFile.size });
     
     // Get Clerk token for authentication
     const token = await getClerkToken();
@@ -379,9 +359,9 @@ const addLead = async (imageFile, bucketId = null) => {
     const headers = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      logger.debug('addLead: Including Authorization header in request');
+      logger.debug('addImageToCollectiveSession: Including Authorization header in request');
     } else {
-      logger.warn('addLead: No Clerk token available for request');
+      logger.warn('addImageToCollectiveSession: No Clerk token available for request');
     }
     
     const fetchOptions = {
@@ -390,40 +370,175 @@ const addLead = async (imageFile, bucketId = null) => {
       body: formData,
       mode: 'cors',
       credentials: 'omit',
-      // Don't set Content-Type header - let browser set it with boundary for FormData
     };
 
-    console.log('⏳ leadflowService.addLead: Sending request with file size:', imageFile.size, 'bytes...');
-    logger.debug('addLead: Sending request...');
+    console.log('⏳ leadflowService.addImageToCollectiveSession: Sending request...');
+    logger.debug('addImageToCollectiveSession: Sending request...');
     const resp = await fetch(url, fetchOptions);
-    console.log('📥 leadflowService.addLead: Response received - Status:', resp.status, 'OK:', resp.ok);
-    logger.debug('addLead: Response received', { status: resp.status, ok: resp.ok });
+    console.log('📥 leadflowService.addImageToCollectiveSession: Response received - Status:', resp.status);
+    logger.debug('addImageToCollectiveSession: Response received', { status: resp.status, ok: resp.ok });
     
     let content;
     try {
       content = await resp.json();
-      console.log('✅ leadflowService.addLead: JSON response parsed:', content);
-      logger.debug('addLead: JSON response parsed', content);
+      console.log('✅ leadflowService.addImageToCollectiveSession: JSON response parsed:', content);
+      logger.debug('addImageToCollectiveSession: JSON response parsed', content);
     } catch (err) {
-      // Non-JSON response
-      console.log('⚠️ leadflowService.addLead: Non-JSON response, getting text...');
-      logger.warn('addLead: Non-JSON response, getting text');
       const textContent = await resp.text();
-      console.log('📄 leadflowService.addLead: Text response:', textContent);
-      logger.debug('addLead: Text response', { textContent });
+      console.log('⚠️ leadflowService.addImageToCollectiveSession: Non-JSON response:', textContent);
+      logger.warn('addImageToCollectiveSession: Non-JSON response');
       content = { detail: textContent };
     }
 
     const result = { status_code: resp.status, content };
-    console.log('🔙 leadflowService.addLead: Returning result:', result);
-    logger.info('addLead: Completed', { status: resp.status, success: resp.status === 200 });
+    console.log('🔙 leadflowService.addImageToCollectiveSession: Returning result:', result);
+    logger.info('addImageToCollectiveSession: Completed', { status: resp.status, success: resp.status === 200 });
     return result;
   } catch (error) {
-    console.error('💥 leadflowService.addLead: Network error:', error);
-    console.error('💥 leadflowService.addLead: Error stack:', error.stack);
-    logger.error('addLead: Network error', { error: error.message, stack: error.stack });
+    console.error('💥 leadflowService.addImageToCollectiveSession: Network error:', error);
+    logger.error('addImageToCollectiveSession: Network error', { error: error.message });
     return { status_code: 503, content: { detail: String(error) } };
   }
+};
+
+/**
+ * Process all images in the collective session with the specified bucket
+ * @param {string} bucketId - Bucket ID to assign extracted leads to
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const processCollectiveSession = async (bucketId) => {
+  console.log('🔄 leadflowService.processCollectiveSession called with bucketId:', bucketId);
+  logger.info('processCollectiveSession called', { bucketId });
+
+  if (!bucketId) {
+    console.error('❌ leadflowService.processCollectiveSession: No bucketId provided');
+    logger.error('processCollectiveSession: No bucketId provided');
+    return { status_code: 400, content: { detail: 'bucket_id is required' } };
+  }
+
+  try {
+    const url = `${BASE_URL}/api/leadflow-service/collective-sessions/process`;
+    console.log('📤 leadflowService.processCollectiveSession: Making request to:', url);
+    logger.debug('processCollectiveSession: Making POST request', { url, bucketId });
+    
+    // Get Clerk token for authentication
+    const token = await getClerkToken();
+    
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      logger.debug('processCollectiveSession: Including Authorization header in request');
+    } else {
+      logger.warn('processCollectiveSession: No Clerk token available for request');
+    }
+    
+    const fetchOptions = {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ bucket_id: bucketId }),
+      mode: 'cors',
+      credentials: 'omit',
+    };
+
+    console.log('⏳ leadflowService.processCollectiveSession: Sending request...');
+    logger.debug('processCollectiveSession: Sending request...');
+    const resp = await fetch(url, fetchOptions);
+    console.log('📥 leadflowService.processCollectiveSession: Response received - Status:', resp.status);
+    logger.debug('processCollectiveSession: Response received', { status: resp.status, ok: resp.ok });
+    
+    let content;
+    try {
+      content = await resp.json();
+      console.log('✅ leadflowService.processCollectiveSession: JSON response parsed:', content);
+      logger.debug('processCollectiveSession: JSON response parsed', content);
+    } catch (err) {
+      const textContent = await resp.text();
+      console.log('⚠️ leadflowService.processCollectiveSession: Non-JSON response:', textContent);
+      logger.warn('processCollectiveSession: Non-JSON response');
+      content = { detail: textContent };
+    }
+
+    const result = { status_code: resp.status, content };
+    console.log('🔙 leadflowService.processCollectiveSession: Returning result:', result);
+    logger.info('processCollectiveSession: Completed', { status: resp.status, success: resp.status === 200 });
+    return result;
+  } catch (error) {
+    console.error('💥 leadflowService.processCollectiveSession: Network error:', error);
+    logger.error('processCollectiveSession: Network error', { error: error.message });
+    return { status_code: 503, content: { detail: String(error) } };
+  }
+};
+
+/**
+ * Delete the collective session (cleanup)
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const deleteCollectiveSession = async () => {
+  console.log('🔄 leadflowService.deleteCollectiveSession called');
+  logger.info('deleteCollectiveSession called');
+
+  try {
+    const url = `${BASE_URL}/api/leadflow-service/collective-sessions/delete`;
+    console.log('📤 leadflowService.deleteCollectiveSession: Making request to:', url);
+    logger.debug('deleteCollectiveSession: Making DELETE request', { url });
+    
+    // Get Clerk token for authentication
+    const token = await getClerkToken();
+    
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const fetchOptions = {
+      method: 'DELETE',
+      headers,
+      mode: 'cors',
+      credentials: 'omit',
+    };
+
+    const resp = await fetch(url, fetchOptions);
+    console.log('📥 leadflowService.deleteCollectiveSession: Response received - Status:', resp.status);
+    
+    let content;
+    try {
+      content = await resp.json();
+    } catch (err) {
+      const textContent = await resp.text();
+      content = { detail: textContent };
+    }
+
+    const result = { status_code: resp.status, content };
+    logger.info('deleteCollectiveSession: Completed', { status: resp.status });
+    return result;
+  } catch (error) {
+    console.error('💥 leadflowService.deleteCollectiveSession: Network error:', error);
+    logger.error('deleteCollectiveSession: Network error', { error: error.message });
+    return { status_code: 503, content: { detail: String(error) } };
+  }
+};
+
+/**
+ * @deprecated Use addImageToCollectiveSession + processCollectiveSession instead
+ * Add lead by uploading an image file (OLD API - NO LONGER WORKS)
+ */
+const addLead = async (imageFile, bucketId = null) => {
+  console.warn('⚠️ addLead is DEPRECATED. Use addImageToCollectiveSession + processCollectiveSession instead.');
+  logger.warn('addLead is DEPRECATED. Use the new collective session flow.');
+  
+  // Redirect to new flow for backwards compatibility
+  if (!imageFile) {
+    return { status_code: 400, content: { detail: 'Image file is required' } };
+  }
+  
+  // Step 1: Add image to session
+  const addResult = await addImageToCollectiveSession(imageFile);
+  if (addResult.status_code !== 200) {
+    return addResult;
+  }
+  
+  // Step 2: Process the session
+  return await processCollectiveSession(bucketId);
 };
 
 /**
@@ -1535,9 +1650,16 @@ export {
   getAllLeads, 
   updateLeadStatus, 
   updateLeadNotes, 
-  addLead, 
+  addLead,  // Deprecated - use collective session functions
   deleteLead, 
   moveLeadToBucket 
+};
+
+// Collective Session exports (New two-step lead processing flow)
+export {
+  addImageToCollectiveSession,
+  processCollectiveSession,
+  deleteCollectiveSession
 };
 
 // Team Management exports

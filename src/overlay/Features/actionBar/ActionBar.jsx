@@ -6,7 +6,7 @@ import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { createLead } from '../../../store/thunks/leadsThunks';
 import { setBuckets } from '../../../store/slices/bucketsSlice';
-import { addTeamLeadFromImage, getAllTeams, getAllTeamBuckets } from '../../../services/leadflowService';
+import { addTeamLeadFromImage, getAllTeams, getAllTeamBuckets, addImageToCollectiveSession, processCollectiveSession } from '../../../services/leadflowService';
 import { fetchAllTeams } from '../../../store/thunks/teamsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
 import { setViewMode, setSelectedTeamId } from '../../../store/slices/teamsSlice';
@@ -272,12 +272,12 @@ const ActionBar = () => {
         throw new Error('Image file is empty - cannot send to server');
       }
       
-      console.log('📤 Calling addLead API with file size:', imageFile.size, 'bytes');
+      console.log('📤 Using new two-step collective session flow with file size:', imageFile.size, 'bytes');
       
       // Check if we're in team mode (use local state for reliability)
       const currentTeamId = localSelectedTeamId || selectedTeamIdRef.current || selectedTeamId;
       if (localViewMode === 'team' && currentTeamId) {
-        // Use team-specific lead creation
+        // Use team-specific lead creation (still uses old flow for now)
         console.log('👥 Team mode detected, using team lead creation', { teamId: currentTeamId, bucketId });
         const result = await addTeamLeadFromImage(imageFile, currentTeamId, bucketId);
         
@@ -293,26 +293,41 @@ const ActionBar = () => {
           showLeadProcessingFeedback('error', { message: errorMessage });
         }
       } else {
-        // Use customer lead creation (existing flow)
-        const result = await dispatch(createLead({ imageFile, bucketId }));
+        // NEW: Use collective session flow (two-step process)
+        // Step 1: Add image to collective session
+        console.log('📤 Step 1: Adding image to collective session...');
+        const addResult = await addImageToCollectiveSession(imageFile);
         
-        console.log('📥 AddLead API Response received:');
-        console.log('- Full Response:', result);
+        console.log('📥 Add image response:', addResult);
         
-        // Check if thunk was fulfilled
-        if (createLead.fulfilled.match(result)) {
-          console.log('🎉 Lead processing initiated successfully!');
-          console.log('✅ Response Details:', result.payload);
+        if (addResult.status_code !== 200) {
+          console.error('❌ Failed to add image to session:', addResult);
+          const errorMessage = addResult?.content?.detail || 'Failed to upload image';
+          showLeadProcessingFeedback('error', { message: errorMessage });
+          return;
+        }
+        
+        console.log('✅ Image added to session successfully');
+        
+        // Step 2: Process the collective session
+        console.log('📤 Step 2: Processing collective session with bucketId:', bucketId);
+        const processResult = await processCollectiveSession(bucketId);
+        
+        console.log('📥 Process session response:', processResult);
+        
+        if (processResult.status_code === 200) {
+          console.log('🎉 Lead processing completed successfully!');
+          console.log('✅ Response Details:', processResult.content);
           
-          const successMessage = result.payload?.message || result.payload?.detail || 'Lead created successfully!';
+          const successMessage = processResult.content?.message || 'Lead created successfully!';
           console.log('📢 Success message:', successMessage);
           
           // Show success animation on floating widget
-          showLeadProcessingFeedback('success', result.payload);
+          showLeadProcessingFeedback('success', processResult.content);
         } else {
-          console.error('❌ Failed to create lead:', result.error);
+          console.error('❌ Failed to process session:', processResult);
           
-          const errorMessage = result.error || 'Failed to create lead';
+          const errorMessage = processResult?.content?.detail || processResult?.content?.error || 'Failed to process lead';
           console.log('📢 Error message:', errorMessage);
           // Show error animation on floating widget
           showLeadProcessingFeedback('error', { message: errorMessage });
