@@ -7,7 +7,7 @@ import {
   setSelectedBucketId,
   addLead as addLeadAction,
   updateLeadStatus as updateLeadStatusAction,
-  updateLeadNotes as updateLeadNotesAction,
+  updateLeadContext as updateLeadContextAction,
   deleteLead as deleteLeadAction,
   moveLeadToBucket as moveLeadToBucketAction
 } from '../slices/leadsSlice';
@@ -117,26 +117,26 @@ export const updateLeadStatus = createAsyncThunk(
 );
 
 /**
- * Update lead notes via API and update Redux state
- * @param {Object} params - { leadId: string, notes: string }
+ * Update lead context via API and update Redux state
+ * @param {Object} params - { leadId: string, context: string }
  */
-export const updateLeadNotes = createAsyncThunk(
-  'leads/updateLeadNotes',
-  async ({ leadId, notes }, { dispatch, rejectWithValue }) => {
+export const updateLeadContext = createAsyncThunk(
+  'leads/updateLeadContext',
+  async ({ leadId, context }, { dispatch, rejectWithValue }) => {
     try {
-      const response = await leadflowService.updateLeadNotes(leadId, notes);
+      const response = await leadflowService.updateLeadContext(leadId, context);
       
       if (response.status_code === 200) {
-        // Store in personal context - Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadNotesAction({ leadId, notes }, 'personal', true));
-        return { leadId, notes };
+        // Store in personal storeContext - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadContextAction({ leadId, context }, 'personal', true));
+        return { leadId, context };
       } else {
-        const errorMessage = response.content?.detail || 'Failed to update lead notes';
+        const errorMessage = response.content?.detail || 'Failed to update lead context';
         dispatch(setError(errorMessage, 'personal', true));
         return rejectWithValue(errorMessage);
       }
     } catch (error) {
-      const errorMessage = error.message || 'Failed to update lead notes';
+      const errorMessage = error.message || 'Failed to update lead context';
       dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }

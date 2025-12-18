@@ -2,7 +2,16 @@ import { createSlice } from '@reduxjs/toolkit';
 
 /**
  * Leads Redux Slice with IPC Broadcast Support
- * Based on MongoDB schema: { leadId, url, username, platform, status, bucketId, notes, createdAt }
+ * 
+ * MongoDB Schema (supports both old and new formats):
+ * 
+ * Legacy fields: { leadId, url, username, platform, status, bucketId, notes, createdAt }
+ * 
+ * New multi-platform fields:
+ * - linkedinUrl, linkedinUsername
+ * - instaUrl, instaUsername
+ * - xUrl, xUsername
+ * - companyName, context
  * 
  * Each reducer supports a 'broadcast' parameter:
  * - broadcast=true: Send to main process for broadcasting (don't update local state)
@@ -227,31 +236,31 @@ const leadsSlice = createSlice({
       })
     },
     
-    // Update lead notes
-    // context: 'personal' or teamId string
-    updateLeadNotes: {
+    // Update lead context
+    // storeContext: 'personal' or teamId string (where to store the lead)
+    updateLeadContext: {
       reducer: (state, action) => {
-        const { data, context, broadcast } = action.payload;
+        const { data, storeContext, broadcast } = action.payload;
         
-        if (context !== 'personal' && !state.teams[context]) {
+        if (storeContext !== 'personal' && !state.teams[storeContext]) {
           return;
         }
         
-        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
+        const leads = storeContext === 'personal' ? state.personal.leads : state.teams[storeContext].leads;
         if (!Array.isArray(leads)) {
           return;
         }
         
-        const { leadId, notes } = data;
+        const { leadId, context: newLeadContext } = data;
         const lead = leads.find(l => 
           l.leadId === leadId || l.id === leadId
         );
         if (lead) {
-          lead.notes = notes;
+          lead.context = newLeadContext;
         }
       },
-      prepare: (data, context = 'personal', broadcast = false) => ({
-        payload: { data, context, broadcast }
+      prepare: (data, storeContext = 'personal', broadcast = false) => ({
+        payload: { data, storeContext, broadcast }
       })
     },
     
@@ -422,7 +431,7 @@ export const {
   setSelectedBucketId,
   addLead,
   updateLeadStatus,
-  updateLeadNotes,
+  updateLeadContext,
   updateLead,
   deleteLead,
   moveLeadToBucket,

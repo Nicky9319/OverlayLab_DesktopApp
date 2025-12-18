@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
-import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
+import { fetchLeads, updateLeadStatus, updateLeadContext, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
 import { fetchTeamLeads, updateTeamLeadStatus, updateTeamLeadNotes, removeTeamLead, moveTeamLeadToBucket } from '../../../store/thunks/teamLeadsThunks';
@@ -103,26 +103,26 @@ const Leads = () => {
     }
   };
 
-  // Function to update lead notes
-  const handleUpdateLeadNotes = async (leadId, newNotes) => {
+  // Function to update lead context
+  const handleUpdateLeadContext = async (leadId, newContext) => {
     try {
       if (viewMode === 'team' && selectedTeamId) {
-        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newNotes }));
+        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newContext }));
         if (updateTeamLeadNotes.fulfilled.match(result)) {
-          console.log('Notes updated successfully for team lead:', leadId);
+          console.log('Context updated successfully for team lead:', leadId);
         } else {
-          console.error('Failed to update team lead notes:', result.error);
+          console.error('Failed to update team lead context:', result.error);
         }
       } else {
-        const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
-        if (updateLeadNotes.fulfilled.match(result)) {
-          console.log('Notes updated successfully for lead:', leadId);
+        const result = await dispatch(updateLeadContext({ leadId, context: newContext }));
+        if (updateLeadContext.fulfilled.match(result)) {
+          console.log('Context updated successfully for lead:', leadId);
         } else {
-          console.error('Failed to update notes:', result.error);
+          console.error('Failed to update context:', result.error);
         }
       }
     } catch (error) {
-      console.error('Error updating lead notes:', error);
+      console.error('Error updating lead context:', error);
     }
   };
 
@@ -312,7 +312,7 @@ const Leads = () => {
         
         <LeadsContainer 
           leads={filteredLeads} 
-          updateLeadNotes={handleUpdateLeadNotes} 
+          updateLeadContext={handleUpdateLeadContext} 
           updateLeadStatus={handleUpdateLeadStatus} 
           deleteLead={handleDeleteLead}
           moveLeadToBucket={handleMoveLeadToBucket}

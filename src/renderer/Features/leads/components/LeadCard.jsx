@@ -1,39 +1,39 @@
 import React, { useState } from 'react';
 import BucketSelector from './BucketSelector';
 
-const LeadCard = ({ lead, isActive, updateLeadNotes, updateLeadStatus, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [editedNotes, setEditedNotes] = useState('');
+const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
+  const [isEditingContext, setIsEditingContext] = useState(false);
+  const [editedContext, setEditedContext] = useState('');
   const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [editedStatus, setEditedStatus] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(null); // Track which URL was just copied
 
   if (!lead) return null;
 
-  const handleNotesEdit = () => {
-    setIsEditingNotes(true);
-    setEditedNotes(lead.notes || '');
+  const handleContextEdit = () => {
+    setIsEditingContext(true);
+    setEditedContext(lead.context || '');
   };
 
-  const handleNotesSave = () => {
-    if (updateLeadNotes) {
-      updateLeadNotes(lead.leadId, editedNotes);
+  const handleContextSave = () => {
+    if (updateLeadContext) {
+      updateLeadContext(lead.leadId, editedContext);
     }
-    // Function call when notes are saved
-    console.log('Notes updated for lead:', lead.leadId, 'New notes:', editedNotes);
-    setIsEditingNotes(false);
+    console.log('Context updated for lead:', lead.leadId, 'New context:', editedContext);
+    setIsEditingContext(false);
   };
 
-  const handleNotesCancel = () => {
-    setIsEditingNotes(false);
-    setEditedNotes('');
+  const handleContextCancel = () => {
+    setIsEditingContext(false);
+    setEditedContext('');
   };
 
-  const handleNotesKeyPress = (e) => {
+  const handleContextKeyPress = (e) => {
     if (e.key === 'Enter' && e.ctrlKey) {
-      handleNotesSave();
+      handleContextSave();
     } else if (e.key === 'Escape') {
-      handleNotesCancel();
+      handleContextCancel();
     }
   };
 
@@ -88,6 +88,75 @@ const LeadCard = ({ lead, isActive, updateLeadNotes, updateLeadStatus, deleteLea
 
   const handleDeleteCancel = () => {
     setShowDeleteConfirm(false);
+  };
+
+  // Copy URL to clipboard with feedback
+  const handleCopyUrl = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedUrl(url);
+      setTimeout(() => setCopiedUrl(null), 2000); // Reset after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  // Check if lead has any social profile URL
+  const hasSocialProfiles = lead.linkedinUrl || lead.instaUrl || lead.xUrl;
+
+  // SocialLink helper component for rendering social profile rows
+  const SocialLink = ({ platform, url, username }) => {
+    if (!url) return null;
+    
+    const displayUrl = url.replace('https://', '').replace('http://', '');
+    const isCopied = copiedUrl === url;
+    
+    return (
+      <div className="flex items-center justify-between py-1.5 px-2 hover:bg-[#1C1C1E] rounded-md group transition-colors">
+        <div className="flex items-center flex-1 min-w-0">
+          <span className="mr-2 flex-shrink-0">
+            {getPlatformIcon(platform)}
+          </span>
+          <button 
+            onClick={() => handleLinkClick(url)}
+            className="text-[#007AFF] hover:text-[#0056CC] truncate cursor-pointer transition-colors text-xs text-left"
+            title="Open in browser"
+          >
+            {displayUrl}
+          </button>
+        </div>
+        <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => handleCopyUrl(url)}
+            className={`p-1 rounded transition-colors ${
+              isCopied 
+                ? 'text-[#00D09C] bg-[#00D09C]/10' 
+                : 'text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F]'
+            }`}
+            title={isCopied ? 'Copied!' : 'Copy URL'}
+          >
+            {isCopied ? (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={() => handleLinkClick(url)}
+            className="p-1 text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F] rounded transition-colors"
+            title="Open in browser"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const getStatusColor = (status) => {
@@ -192,192 +261,185 @@ const LeadCard = ({ lead, isActive, updateLeadNotes, updateLeadStatus, deleteLea
           : 'opacity-0 scale-95 translate-x-4 pointer-events-none'
       }`}
     >
-      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-4 max-w-4xl mx-auto max-h-[70vh] overflow-y-auto">
-        {/* Header - More compact */}
-        <div className="flex items-center space-x-3 mb-3">
-          <div className="w-10 h-10 bg-[#007AFF] rounded-full flex items-center justify-center text-white font-semibold text-sm">
-            {lead.username?.charAt(0)?.toUpperCase() || 'L'}
-          </div>
-          <div className="flex-1">
-            <h3 className="text-base font-semibold text-[#FFFFFF]">
-              @{lead.username || 'Unknown User'}
-            </h3>
-            <div className="flex items-center gap-1">
-              <span className="text-[#007AFF]">
-                {getPlatformIcon(lead.platform)}
-              </span>
-              <span className="text-sm text-[#8E8E93]">
-                {lead.platform || 'Unknown Platform'}
-              </span>
+      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
+        
+        {/* Top Row: Social Icons + Actions */}
+        <div className="flex items-center justify-between mb-3">
+          {/* Social Media Icons - Clickable */}
+          <div className="flex items-center gap-3" style={{ overflow: 'visible' }}>
+            {/* LinkedIn */}
+            <div className="relative group/linkedin" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.linkedinUrl && handleLinkClick(lead.linkedinUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.linkedinUrl 
+                    ? 'bg-[#0A66C2] hover:bg-[#004182] cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.linkedinUrl || 'No LinkedIn'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M22.46 0H1.54C.69 0 0 .69 0 1.54v20.92C0 23.31.69 24 1.54 24h20.92c.85 0 1.54-.69 1.54-1.54V1.54C24 .69 23.31 0 22.46 0zM7.11 20.45H3.56V9h3.55v11.45zM5.34 7.43c-1.14 0-2.06-.93-2.06-2.06s.92-2.06 2.06-2.06 2.06.93 2.06 2.06-.92 2.06-2.06 2.06zM20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.47-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Instagram */}
+            <div className="relative group/insta" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.instaUrl && handleLinkClick(lead.instaUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.instaUrl 
+                    ? 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 hover:opacity-80 cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.instaUrl || 'No Instagram'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.43.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.43.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.43-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.43-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0-2.16c-3.26 0-3.67.01-4.95.07-1.28.06-2.16.27-2.93.57-.79.31-1.46.72-2.13 1.39-.67.67-1.08 1.34-1.39 2.13-.3.77-.51 1.65-.57 2.93-.06 1.28-.07 1.69-.07 4.95s.01 3.67.07 4.95c.06 1.28.27 2.16.57 2.93.31.79.72 1.46 1.39 2.13.67.67 1.34 1.08 2.13 1.39.77.3 1.65.51 2.93.57 1.28.06 1.69.07 4.95.07s3.67-.01 4.95-.07c1.28-.06 2.16-.27 2.93-.57.79-.31 1.46-.72 2.13-1.39.67-.67 1.08-1.34 1.39-2.13.3-.77.51-1.65.57-2.93.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.28-.27-2.16-.57-2.93-.31-.79-.72-1.46-1.39-2.13-.67-.67-1.34-1.08-2.13-1.39-.77-.3-1.65-.51-2.93-.57C15.67.01 15.26 0 12 0z"/>
+                  <path d="M12 5.84c-3.4 0-6.16 2.76-6.16 6.16s2.76 6.16 6.16 6.16 6.16-2.76 6.16-6.16-2.76-6.16-6.16-6.16zm0 10.15c-2.2 0-3.99-1.79-3.99-3.99s1.79-3.99 3.99-3.99 3.99 1.79 3.99 3.99-1.79 3.99-3.99 3.99z"/>
+                  <circle cx="18.41" cy="5.59" r="1.44"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* X/Twitter */}
+            <div className="relative group/twitter" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.xUrl && handleLinkClick(lead.xUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.xUrl 
+                    ? 'bg-black hover:bg-[#1a1a1a] cursor-pointer border border-[#3D3D3F]' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.xUrl || 'No X/Twitter'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
             </div>
           </div>
+
+          {/* Right Actions */}
           <div className="flex items-center gap-2">
+            {buckets.length > 1 && (
+              <BucketSelector
+                buckets={buckets}
+                currentBucketId={currentBucketId}
+                onBucketChange={moveLeadToBucket}
+                leadId={lead.leadId}
+                className="flex items-center"
+              />
+            )}
             <button
               onClick={handleDeleteClick}
-              className="p-2 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded-lg transition-colors"
+              className="p-1.5 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded transition-colors"
               title="Delete lead"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </button>
           </div>
         </div>
 
-        {/* Bucket Selector */}
-        {buckets.length > 1 && (
-          <div className="mb-3">
-            <BucketSelector
-              buckets={buckets}
-              currentBucketId={currentBucketId}
-              onBucketChange={moveLeadToBucket}
-              leadId={lead.leadId}
-              className="flex items-center"
-            />
-          </div>
-        )}
-
-        {/* Profile URL */}
-        {lead.url && (
-          <div className="mb-3">
-            <div className="flex items-center text-sm text-[#E5E5E7]">
-              <svg className="w-4 h-4 mr-2 text-[#8E8E93]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-              <button 
-                onClick={() => handleLinkClick(lead.url)}
-                className="text-[#007AFF] hover:text-[#0056CC] truncate cursor-pointer transition-colors text-xs"
-                title="Open in default browser"
+        {/* Status Row */}
+        <div className="mb-2">
+          {isEditingStatus ? (
+            <div className="bg-[#1C1C1E] rounded-md p-2">
+              <input
+                type="text"
+                value={editedStatus}
+                onChange={(e) => setEditedStatus(e.target.value)}
+                onKeyDown={handleStatusKeyPress}
+                className="w-full px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none mb-2"
+                placeholder="Enter custom status..."
+                autoFocus
+              />
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {['cold message', 'first follow up', 'meeting', 'closed'].map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setEditedStatus(status)}
+                    className="px-2 py-0.5 text-xs bg-[#2D2D2F] text-[#8E8E93] hover:bg-[#007AFF] hover:text-white rounded-full capitalize transition-colors"
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={handleStatusCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
+                <button onClick={handleStatusSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#8E8E93]">Status:</span>
+              <button
+                onClick={handleStatusEdit}
+                className={`px-3 py-1 text-xs font-medium rounded-full capitalize cursor-pointer hover:opacity-80 ${getStatusColor(lead.status)}`}
               >
-                {lead.url.replace('https://', '').replace('http://', '')}
+                {lead.status || 'Cold Message'}
               </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Main Content - Horizontal Layout */}
-        <div className="flex gap-4">
-          {/* Notes Section - Left Side */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-[#E5E5E7]">Notes</h4>
-              {!isEditingNotes && (
-                <button
-                  onClick={handleNotesEdit}
-                  className="p-1 text-[#8E8E93] hover:text-[#FFFFFF] transition-colors"
-                  title="Edit notes"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-              )}
+        {/* Company Row */}
+        <div className="flex items-center h-8 bg-[#1C1C1E] rounded-md px-2 mb-2">
+          <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <span className="text-xs text-[#8E8E93] ml-2 w-16">Company</span>
+          {lead.companyName ? (
+            <span className="text-xs text-[#E5E5E7] truncate">{lead.companyName}</span>
+          ) : (
+            <span className="text-xs text-[#4A4A4A] italic">No data</span>
+          )}
+        </div>
+
+        {/* Context Section */}
+        <div className="bg-[#1C1C1E] rounded-md px-2 py-2">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center">
+              <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+              <span className="text-xs text-[#8E8E93] ml-2">Context</span>
             </div>
-            
-            {isEditingNotes ? (
-              <div className="space-y-2">
-                <textarea
-                  value={editedNotes}
-                  onChange={(e) => setEditedNotes(e.target.value)}
-                  onKeyDown={handleNotesKeyPress}
-                  className="w-full h-20 px-2 py-2 text-sm bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] focus:outline-none focus:ring-1 focus:ring-[#007AFF] resize-none"
-                  placeholder="Add your notes here..."
-                  autoFocus
-                />
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={handleNotesCancel}
-                    className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleNotesSave}
-                    className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded transition-colors"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div 
-                className="text-sm text-[#E5E5E7] bg-[#1C1C1E] p-2 rounded-md min-h-[60px] cursor-pointer hover:bg-[#2D2D2F] transition-colors"
-                onClick={handleNotesEdit}
-              >
-                {lead.notes || (
-                  <span className="text-[#8E8E93] italic">Click to add notes...</span>
-                )}
-              </div>
+            {!isEditingContext && (
+              <button onClick={handleContextEdit} className="p-0.5 text-[#8E8E93] hover:text-white">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
             )}
           </div>
-
-          {/* Status Section - Right Side */}
-          <div className="w-64">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-[#E5E5E7]">Status</h4>
-              {!isEditingStatus && (
-                <button
-                  onClick={handleStatusEdit}
-                  className="p-1 text-[#8E8E93] hover:text-[#FFFFFF] transition-colors"
-                  title="Edit status"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
+          {isEditingContext ? (
+            <div className="space-y-2">
+              <textarea
+                value={editedContext}
+                onChange={(e) => setEditedContext(e.target.value)}
+                onKeyDown={handleContextKeyPress}
+                className="w-full h-20 px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none resize-none"
+                placeholder="Add context about this lead..."
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={handleContextCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
+                <button onClick={handleContextSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs min-h-[36px] cursor-pointer" onClick={handleContextEdit}>
+              {lead.context ? (
+                <span className="text-[#E5E5E7]">{lead.context}</span>
+              ) : (
+                <span className="text-[#4A4A4A] italic">No data - click to add</span>
               )}
             </div>
-            
-            {isEditingStatus ? (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={editedStatus}
-                  onChange={(e) => setEditedStatus(e.target.value)}
-                  onKeyDown={handleStatusKeyPress}
-                  className="w-full px-2 py-2 text-sm bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
-                  placeholder="Type custom status..."
-                  autoFocus
-                />
-                <div className="flex flex-wrap gap-1">
-                  {['cold message', 'first follow up', 'second follow up', 'meeting', 'closed'].map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => setEditedStatus(status)}
-                      className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#007AFF] hover:text-white rounded transition-colors capitalize"
-                    >
-                      {status}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={handleStatusCancel}
-                    className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleStatusSave}
-                    className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded transition-colors"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div 
-                className="cursor-pointer hover:bg-[#2D2D2F] transition-colors p-2 rounded"
-                onClick={handleStatusEdit}
-              >
-                <span className={`inline-block px-2 py-1 text-sm font-medium rounded-full capitalize ${
-                  getStatusColor(lead.status)
-                }`}>
-                  {lead.status || 'Cold Message'}
-                </span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
       </div>

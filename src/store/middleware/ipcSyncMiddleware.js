@@ -24,7 +24,7 @@ const BROADCASTABLE_ACTIONS = [
   'leads/setLeads',
   'leads/addLead',
   'leads/updateLeadStatus',
-  'leads/updateLeadNotes', 
+  'leads/updateLeadContext', 
   'leads/updateLead',
   'leads/deleteLead',
   'leads/moveLeadToBucket',

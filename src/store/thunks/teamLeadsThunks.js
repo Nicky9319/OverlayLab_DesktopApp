@@ -8,7 +8,7 @@ import {
   addLead as addLeadAction,
   updateLead as updateLeadAction,
   updateLeadStatus as updateLeadStatusAction,
-  updateLeadNotes as updateLeadNotesAction,
+  updateLeadContext as updateLeadContextAction,
   deleteLead as deleteLeadAction,
   moveLeadToBucket as moveLeadToBucketAction
 } from '../slices/leadsSlice';
@@ -201,7 +201,7 @@ export const updateTeamLeadNotes = createAsyncThunk(
       
       if (response.status_code === 200) {
         // Store in team context - Broadcast to all windows (broadcast=true)
-        dispatch(updateLeadNotesAction({ leadId, notes }, teamId, true));
+        dispatch(updateLeadContextAction({ leadId, context: notes }, teamId, true));
         return { leadId, teamId, notes };
       } else {
         const errorMessage = response.content?.detail || 'Failed to update team lead notes';

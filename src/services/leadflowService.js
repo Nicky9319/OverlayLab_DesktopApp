@@ -650,24 +650,24 @@ const updateLeadStatus = async (leadId, status) => {
 };
 
 /**
- * Update lead notes
+ * Update lead context
  * @param {string} leadId - ID of the lead to update
- * @param {string} notes - New notes for the lead
+ * @param {string} context - New context for the lead
  * @returns {Promise<Object>} Response with status_code and content
  */
-const updateLeadNotes = async (leadId, notes) => {
-  logger.info('updateLeadNotes called', { leadId, notes });
+const updateLeadContext = async (leadId, context) => {
+  logger.info('updateLeadContext called', { leadId, context });
   
   if (!leadId) {
     return { status_code: 400, content: { detail: 'lead_id is required' } };
   }
 
-  const resp = await request('/api/leadflow-service/leads/update-lead-notes', {
+  const resp = await request('/api/leadflow-service/leads/update-lead-context', {
     method: 'PUT',
-    body: JSON.stringify({ lead_id: leadId, notes: notes || '' }),
+    body: JSON.stringify({ lead_id: leadId, context: context || '' }),
   });
 
-  logger.info('updateLeadNotes: Completed', { status: resp.status_code });
+  logger.info('updateLeadContext: Completed', { status: resp.status_code });
   return resp;
 };
 
@@ -1649,7 +1649,7 @@ export {
 export { 
   getAllLeads, 
   updateLeadStatus, 
-  updateLeadNotes, 
+  updateLeadContext, 
   addLead,  // Deprecated - use collective session functions
   deleteLead, 
   moveLeadToBucket 
