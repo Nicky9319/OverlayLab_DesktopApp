@@ -229,22 +229,17 @@ const Leads = () => {
     <div className="leads-page p-6 bg-[#000000] min-h-screen">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#FFFFFF] mb-2">Leads</h1>
-          <p className="text-[#8E8E93] mb-4">
-            Browse through your leads one at a time with our card-based interface
-          </p>
-          
-          {/* Bucket Selection and Controls */}
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor="bucket-select" className="text-sm font-medium text-[#E5E5E7]">
-                Filter by Bucket:
-              </label>
+          {/* Header Row: Title + Filter */}
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-[#FFFFFF]">Leads</h1>
+            
+            {/* Bucket Selection */}
+            <div className="flex items-center gap-3">
               <select
                 id="bucket-select"
                 value={selectedBucketId || ''}
                 onChange={(e) => handleBucketChange(e.target.value || null)}
-                className="px-3 py-2 bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="px-3 py-1.5 bg-[#1C1C1E] border border-[#3D3D3F] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
                 disabled={bucketsError && viewMode === 'team'}
               >
                 <option value="">All Leads</option>
@@ -254,28 +249,27 @@ const Leads = () => {
                   </option>
                 ))}
               </select>
-            </div>
-            
-            <button
-              onClick={handleRefetchLeads}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-[#007AFF] text-white rounded-md hover:bg-[#0056CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-            >
-              {loading ? (
-                <>
+              
+              <button
+                onClick={handleRefetchLeads}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF] text-white rounded-md hover:bg-[#0056CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                title="Refetch Leads"
+              >
+                {loading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Loading...
-                </>
-              ) : (
-                <>
+                ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Refetch Leads
-                </>
-              )}
-            </button>
+                )}
+              </button>
+            </div>
           </div>
+          
+          <p className="text-[#8E8E93] text-sm mb-4">
+            Browse through your leads one at a time with our card-based interface
+          </p>
           
           {/* Error display */}
           {bucketsError && viewMode === 'team' && selectedTeamId && (
