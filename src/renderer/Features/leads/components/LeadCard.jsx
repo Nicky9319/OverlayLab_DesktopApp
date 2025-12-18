@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import BucketSelector from './BucketSelector';
 
-const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
+const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateLeadCheckpoint, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
   const [isEditingContext, setIsEditingContext] = useState(false);
   const [editedContext, setEditedContext] = useState('');
   const [isEditingStatus, setIsEditingStatus] = useState(false);
@@ -323,6 +323,20 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, deleteL
 
           {/* Right Actions */}
           <div className="flex items-center gap-2">
+            {/* Checkpoint Toggle */}
+            <button
+              onClick={() => updateLeadCheckpoint && updateLeadCheckpoint(lead.leadId, !lead.checkpoint)}
+              className={`p-1.5 rounded transition-colors ${
+                lead.checkpoint 
+                  ? 'text-[#FFD60A] bg-[#FFD60A]/10 hover:bg-[#FFD60A]/20' 
+                  : 'text-[#8E8E93] hover:text-[#FFD60A] hover:bg-[#1C1C1E]'
+              }`}
+              title={lead.checkpoint ? 'Remove checkpoint' : 'Mark as checkpoint'}
+            >
+              <svg className="w-4 h-4" fill={lead.checkpoint ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+            </button>
             {buckets.length > 1 && (
               <BucketSelector
                 buckets={buckets}

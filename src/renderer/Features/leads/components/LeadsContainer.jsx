@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import LeadCard from './LeadCard';
 
-const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
+const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, updateLeadCheckpoint, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isEditingCounter, setIsEditingCounter] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -43,6 +43,21 @@ const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, delet
       window.removeEventListener('keydown', handleKeyPress);
     };
   }, [currentIndex, leads.length]);
+
+  // Listen for navigation events from checkpoints modal
+  useEffect(() => {
+    const handleNavigateToLead = (e) => {
+      const { index } = e.detail;
+      if (index >= 0 && index < leads.length) {
+        setCurrentIndex(index);
+      }
+    };
+
+    window.addEventListener('navigateToLead', handleNavigateToLead);
+    return () => {
+      window.removeEventListener('navigateToLead', handleNavigateToLead);
+    };
+  }, [leads.length]);
 
   const handlePrevious = () => {
     setCurrentIndex(prev => prev > 0 ? prev - 1 : leads.length - 1);
@@ -236,6 +251,7 @@ const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, delet
           isActive={true}
           updateLeadContext={updateLeadContext}
           updateLeadStatus={updateLeadStatus}
+          updateLeadCheckpoint={updateLeadCheckpoint}
           deleteLead={deleteLead}
           moveLeadToBucket={moveLeadToBucket}
           buckets={buckets}

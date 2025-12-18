@@ -421,6 +421,34 @@ const leadsSlice = createSlice({
         payload: { data, context, broadcast }
       })
     },
+    
+    // Update lead checkpoint
+    // context: 'personal' or teamId string
+    updateLeadCheckpoint: {
+      reducer: (state, action) => {
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          return;
+        }
+        
+        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
+        if (!Array.isArray(leads)) {
+          return;
+        }
+        
+        const { leadId, checkpoint } = data;
+        const lead = leads.find(l => 
+          l.leadId === leadId || l.id === leadId
+        );
+        if (lead) {
+          lead.checkpoint = checkpoint;
+        }
+      },
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
+      })
+    },
   },
 });
 
@@ -432,6 +460,7 @@ export const {
   addLead,
   updateLeadStatus,
   updateLeadContext,
+  updateLeadCheckpoint,
   updateLead,
   deleteLead,
   moveLeadToBucket,

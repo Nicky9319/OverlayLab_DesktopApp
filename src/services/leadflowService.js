@@ -672,6 +672,31 @@ const updateLeadContext = async (leadId, context) => {
 };
 
 /**
+ * Update lead checkpoint
+ * @param {string} leadId - ID of the lead to update
+ * @param {boolean} checkpoint - Checkpoint value (true/false)
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateLeadCheckpoint = async (leadId, checkpoint) => {
+  logger.info('updateLeadCheckpoint called', { leadId, checkpoint });
+  
+  if (!leadId) {
+    return { status_code: 400, content: { detail: 'lead_id is required' } };
+  }
+  if (checkpoint === undefined || checkpoint === null) {
+    return { status_code: 400, content: { detail: 'checkpoint is required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/leads/update-lead-checkpoint', {
+    method: 'PUT',
+    body: JSON.stringify({ lead_id: leadId, checkpoint: Boolean(checkpoint) }),
+  });
+
+  logger.info('updateLeadCheckpoint: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
  * Delete lead
  * @param {string} leadId - ID of the lead to delete
  * @param {string|null} bucketId - Optional bucket ID (for context)
@@ -1289,6 +1314,38 @@ const updateTeamLeadNotes = async (teamId, leadId, notes) => {
 };
 
 /**
+ * Update team lead checkpoint
+ * @param {string} teamId - ID of the team
+ * @param {string} leadId - ID of the lead to update
+ * @param {boolean} checkpoint - Checkpoint value (true/false)
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateTeamLeadCheckpoint = async (teamId, leadId, checkpoint) => {
+  logger.info('updateTeamLeadCheckpoint called', { teamId, leadId, checkpoint });
+  
+  if (!teamId || !leadId) {
+    return { status_code: 400, content: { detail: 'teamId and leadId are required' } };
+  }
+  if (checkpoint === undefined || checkpoint === null) {
+    return { status_code: 400, content: { detail: 'checkpoint is required' } };
+  }
+
+  const body = {
+    teamId,
+    leadId,
+    checkpoint: Boolean(checkpoint)
+  };
+
+  const resp = await request('/api/leadflow-service/teams/leads/update-lead-checkpoint', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+  logger.info('updateTeamLeadCheckpoint: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
  * Move team lead to different bucket
  * @param {string} teamId - ID of the team
  * @param {string} leadId - ID of the lead to move
@@ -1650,6 +1707,7 @@ export {
   getAllLeads, 
   updateLeadStatus, 
   updateLeadContext, 
+  updateLeadCheckpoint,
   addLead,  // Deprecated - use collective session functions
   deleteLead, 
   moveLeadToBucket 
@@ -1681,6 +1739,7 @@ export {
   updateTeamLead,
   updateTeamLeadStatus,
   updateTeamLeadNotes,
+  updateTeamLeadCheckpoint,
   moveTeamLeadToBucket
 };
 

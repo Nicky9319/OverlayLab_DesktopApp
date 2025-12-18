@@ -8,6 +8,7 @@ import {
   addLead as addLeadAction,
   updateLeadStatus as updateLeadStatusAction,
   updateLeadContext as updateLeadContextAction,
+  updateLeadCheckpoint as updateLeadCheckpointAction,
   deleteLead as deleteLeadAction,
   moveLeadToBucket as moveLeadToBucketAction
 } from '../slices/leadsSlice';
@@ -191,6 +192,33 @@ export const moveLeadToBucket = createAsyncThunk(
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to move lead';
+      dispatch(setError(errorMessage, 'personal', true));
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+/**
+ * Update lead checkpoint via API and update Redux state
+ * @param {Object} params - { leadId: string, checkpoint: boolean }
+ */
+export const updateLeadCheckpoint = createAsyncThunk(
+  'leads/updateLeadCheckpoint',
+  async ({ leadId, checkpoint }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await leadflowService.updateLeadCheckpoint(leadId, checkpoint);
+      
+      if (response.status_code === 200) {
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadCheckpointAction({ leadId, checkpoint }, 'personal', true));
+        return { leadId, checkpoint };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to update lead checkpoint';
+        dispatch(setError(errorMessage, 'personal', true));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to update lead checkpoint';
       dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }

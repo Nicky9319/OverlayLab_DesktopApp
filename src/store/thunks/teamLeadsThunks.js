@@ -9,6 +9,7 @@ import {
   updateLead as updateLeadAction,
   updateLeadStatus as updateLeadStatusAction,
   updateLeadContext as updateLeadContextAction,
+  updateLeadCheckpoint as updateLeadCheckpointAction,
   deleteLead as deleteLeadAction,
   moveLeadToBucket as moveLeadToBucketAction
 } from '../slices/leadsSlice';
@@ -237,6 +238,33 @@ export const moveTeamLeadToBucket = createAsyncThunk(
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to move team lead';
+      dispatch(setError(errorMessage, teamId, true));
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+/**
+ * Update team lead checkpoint via API and update Redux state
+ * @param {Object} params - { teamId: string, leadId: string, checkpoint: boolean }
+ */
+export const updateTeamLeadCheckpoint = createAsyncThunk(
+  'teamLeads/updateTeamLeadCheckpoint',
+  async ({ teamId, leadId, checkpoint }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await leadflowService.updateTeamLeadCheckpoint(teamId, leadId, checkpoint);
+      
+      if (response.status_code === 200) {
+        // Store in team context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadCheckpointAction({ leadId, checkpoint }, teamId, true));
+        return { leadId, teamId, checkpoint };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to update team lead checkpoint';
+        dispatch(setError(errorMessage, teamId, true));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to update team lead checkpoint';
       dispatch(setError(errorMessage, teamId, true));
       return rejectWithValue(errorMessage);
     }
