@@ -65,13 +65,16 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
     }
   };
 
-  const handleLinkClick = (url) => {
+  const handleLinkClick = (url, isEmail = false) => {
+    // Convert email to mailto URL if needed
+    const finalUrl = isEmail && !url.startsWith('mailto:') ? `mailto:${url}` : url;
+    
     // Use electron's shell to open URL in default browser
     if (window.electronAPI && window.electronAPI.openExternal) {
-      window.electronAPI.openExternal(url);
+      window.electronAPI.openExternal(finalUrl);
     } else {
       // Fallback for development or if electronAPI is not available
-      console.log('Would open URL:', url);
+      console.log('Would open URL:', finalUrl);
     }
   };
 
@@ -102,7 +105,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
   };
 
   // Check if lead has any social profile URL
-  const hasSocialProfiles = lead.linkedinUrl || lead.instaUrl || lead.xUrl;
+  const hasSocialProfiles = lead.linkedinUrl || lead.instaUrl || lead.xUrl || lead.email || lead.pinterestUrl || lead.artstationUrl || lead.youtubeUrl;
 
   // SocialLink helper component for rendering social profile rows
   const SocialLink = ({ platform, url, username }) => {
@@ -242,6 +245,22 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
             </svg>
           </div>
         );
+      case 'artstation':
+        return (
+          <div className="w-5 h-5 bg-[#13AFF0] rounded flex items-center justify-center">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
+              <path d="M0 17.723l2.027 3.505h.001l2.027-3.505H0zm24 .099l-2.121 3.636h-.001l-2.122-3.636h4.244zm-9.364-3.48L10.727 24h-2.97l4.244-7.401 1.598 2.576 1.597-2.576zm2.193-3.777l3.498 6.004-3.498-6.004h3.497l.001-.001H15.93zm-5.75 0l3.5 6.004-3.5-6.004h3.5l-.001-.001H10.18zm-5.75 0l3.5 6.004-3.5-6.004H8.43l-.001-.001H4.43zm12.696-3.9l-1.599 2.576-1.597 2.576-2.122-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-8.843 0l-1.599 2.576-1.598 2.576-2.121-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-5.75 0l-1.599 2.576-1.598 2.576L0 4.787h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97z"/>
+            </svg>
+          </div>
+        );
+      case 'youtube':
+        return (
+          <div className="w-5 h-5 bg-[#FF0000] rounded flex items-center justify-center">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+          </div>
+        );
       default:
         return (
           <div className="w-5 h-5 bg-[#8E8E93] rounded flex items-center justify-center">
@@ -316,6 +335,74 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Email */}
+            <div className="relative group/email" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.email && handleLinkClick(lead.email, true)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.email 
+                    ? 'bg-[#EA4335] hover:bg-[#D33B2C] cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.email || 'No Email'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h3.819v.545L12 10.455l6.545-6.089v-.545h3.819c.904 0 1.636.732 1.636 1.636z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Pinterest */}
+            <div className="relative group/pinterest" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.pinterestUrl && handleLinkClick(lead.pinterestUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.pinterestUrl 
+                    ? 'bg-[#E60023] hover:bg-[#CC001F] cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.pinterestUrl || 'No Pinterest'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.041-3.439.219-.937 1.404-5.965 1.404-5.965s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.402.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.357-.629-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24.009 12.017 24.009c6.624 0 11.99-5.367 11.99-12.014C24.007 5.367 18.641.001 12.017.001z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* ArtStation */}
+            <div className="relative group/artstation" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.artstationUrl && handleLinkClick(lead.artstationUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.artstationUrl 
+                    ? 'bg-[#13AFF0] hover:bg-[#1099D4] cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.artstationUrl || 'No ArtStation'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M0 17.723l2.027 3.505h.001l2.027-3.505H0zm24 .099l-2.121 3.636h-.001l-2.122-3.636h4.244zm-9.364-3.48L10.727 24h-2.97l4.244-7.401 1.598 2.576 1.597-2.576zm2.193-3.777l3.498 6.004-3.498-6.004h3.497l.001-.001H15.93zm-5.75 0l3.5 6.004-3.5-6.004h3.5l-.001-.001H10.18zm-5.75 0l3.5 6.004-3.5-6.004H8.43l-.001-.001H4.43zm12.696-3.9l-1.599 2.576-1.597 2.576-2.122-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-8.843 0l-1.599 2.576-1.598 2.576-2.121-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-5.75 0l-1.599 2.576-1.598 2.576L0 4.787h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97z"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* YouTube */}
+            <div className="relative group/youtube" style={{ overflow: 'visible' }}>
+              <button
+                onClick={() => lead.youtubeUrl && handleLinkClick(lead.youtubeUrl)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                  lead.youtubeUrl 
+                    ? 'bg-[#FF0000] hover:bg-[#E60000] cursor-pointer' 
+                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
+                }`}
+                title={lead.youtubeUrl || 'No YouTube'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
                 </svg>
               </button>
             </div>
