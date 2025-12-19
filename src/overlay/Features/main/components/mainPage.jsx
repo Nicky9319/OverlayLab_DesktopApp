@@ -12,7 +12,7 @@ import { OVERLAY_TYPES } from '../../../config/overlayTypes';
 
 const MainPage = () => {
   const dispatch = useDispatch();
-  const { floatingWidgetVisible, actionBarVisible, allWidgetsVisible, messageCount } = useSelector(
+  const { floatingWidgetVisible, actionBarVisible, actionBarCollapsed, allWidgetsVisible, messageCount } = useSelector(
     (state) => state.uiVisibility
   );
   const currentOverlayType = useSelector((state) => state.overlayType.currentOverlayType);
@@ -106,15 +106,17 @@ const MainPage = () => {
       }
     }
 
-    // Handle action bar visibility (considering both individual and global state)
-    const shouldShowActionBar = actionBarVisible && allWidgetsVisible;
+    // Handle action bar visibility (considering individual, global, and collapsed state)
+    const shouldShowActionBar = actionBarVisible && allWidgetsVisible && !actionBarCollapsed;
     if (shouldShowActionBar !== localVisibility.actionBar) {
       if (shouldShowActionBar) {
+        // Show immediately for smooth fade-in animation
         setLocalVisibility(prev => ({ ...prev, actionBar: true }));
       } else {
+        // Hide with delay for smooth fade-out animation
         const timeoutId = setTimeout(() => {
           setLocalVisibility(prev => ({ ...prev, actionBar: false }));
-        }, 300);
+        }, 300); // Match the transition duration
         timeoutIds.push(timeoutId);
       }
     }
@@ -124,7 +126,7 @@ const MainPage = () => {
     return () => {
       timeoutIds.forEach(id => clearTimeout(id));
     };
-  }, [floatingWidgetVisible, actionBarVisible, allWidgetsVisible, localVisibility]);
+  }, [floatingWidgetVisible, actionBarVisible, actionBarCollapsed, allWidgetsVisible, localVisibility]);
 
   return (
     <>
@@ -148,20 +150,18 @@ const MainPage = () => {
           
           {localVisibility.actionBar && (
             <div style={{
-              opacity: (actionBarVisible && allWidgetsVisible) ? 1 : 0,
-              transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              transform: (actionBarVisible && allWidgetsVisible) ? 'translateY(0)' : 'translateY(-10px)',
+              opacity: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 1 : 0,
+              transform: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 'translateY(0)' : 'translateY(-10px)',
+              transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               transitionProperty: 'opacity, transform',
-              pointerEvents: (actionBarVisible && allWidgetsVisible) ? 'auto' : 'none'
+              pointerEvents: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 'auto' : 'none'
             }}>
               <ActionBar />
             </div>
           )}
           
-          {/* Metric Bar - Only show when action bar is visible */}
-          {localVisibility.actionBar && (
-            <MetricBar />
-          )}
+          {/* Metric Bar - Show/hide based on its own visibility state, independent of action bar collapse */}
+          <MetricBar />
         </>
       )}
 

@@ -1,14 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
-import { fetchLeads, updateLeadStatus, updateLeadNotes, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
+import { fetchLeads, updateLeadStatus, updateLeadContext, updateLeadCheckpoint, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
-import { fetchTeamLeads, updateTeamLeadStatus, updateTeamLeadNotes, removeTeamLead, moveTeamLeadToBucket } from '../../../store/thunks/teamLeadsThunks';
+import { fetchTeamLeads, updateTeamLeadStatus, updateTeamLeadNotes, updateTeamLeadCheckpoint, removeTeamLead, moveTeamLeadToBucket } from '../../../store/thunks/teamLeadsThunks';
 import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 
 const Leads = () => {
   const dispatch = useDispatch();
+  const [showCheckpoints, setShowCheckpoints] = useState(false);
   
   // Get view mode and selected team
   const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
@@ -103,26 +104,26 @@ const Leads = () => {
     }
   };
 
-  // Function to update lead notes
-  const handleUpdateLeadNotes = async (leadId, newNotes) => {
+  // Function to update lead context
+  const handleUpdateLeadContext = async (leadId, newContext) => {
     try {
       if (viewMode === 'team' && selectedTeamId) {
-        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newNotes }));
+        const result = await dispatch(updateTeamLeadNotes({ teamId: selectedTeamId, leadId, notes: newContext }));
         if (updateTeamLeadNotes.fulfilled.match(result)) {
-          console.log('Notes updated successfully for team lead:', leadId);
+          console.log('Context updated successfully for team lead:', leadId);
         } else {
-          console.error('Failed to update team lead notes:', result.error);
+          console.error('Failed to update team lead context:', result.error);
         }
       } else {
-        const result = await dispatch(updateLeadNotes({ leadId, notes: newNotes }));
-        if (updateLeadNotes.fulfilled.match(result)) {
-          console.log('Notes updated successfully for lead:', leadId);
+        const result = await dispatch(updateLeadContext({ leadId, context: newContext }));
+        if (updateLeadContext.fulfilled.match(result)) {
+          console.log('Context updated successfully for lead:', leadId);
         } else {
-          console.error('Failed to update notes:', result.error);
+          console.error('Failed to update context:', result.error);
         }
       }
     } catch (error) {
-      console.error('Error updating lead notes:', error);
+      console.error('Error updating lead context:', error);
     }
   };
 
@@ -169,6 +170,29 @@ const Leads = () => {
       }
     } catch (error) {
       console.error('Error deleting lead:', error);
+    }
+  };
+
+  // Function to update lead checkpoint
+  const handleUpdateLeadCheckpoint = async (leadId, checkpoint) => {
+    try {
+      if (viewMode === 'team' && selectedTeamId) {
+        const result = await dispatch(updateTeamLeadCheckpoint({ teamId: selectedTeamId, leadId, checkpoint }));
+        if (updateTeamLeadCheckpoint.fulfilled.match(result)) {
+          console.log('Checkpoint updated successfully for team lead:', leadId);
+        } else {
+          console.error('Failed to update team lead checkpoint:', result.error);
+        }
+      } else {
+        const result = await dispatch(updateLeadCheckpoint({ leadId, checkpoint }));
+        if (updateLeadCheckpoint.fulfilled.match(result)) {
+          console.log('Checkpoint updated successfully for lead:', leadId);
+        } else {
+          console.error('Failed to update checkpoint:', result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating lead checkpoint:', error);
     }
   };
 
@@ -229,22 +253,17 @@ const Leads = () => {
     <div className="leads-page p-6 bg-[#000000] min-h-screen">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#FFFFFF] mb-2">Leads</h1>
-          <p className="text-[#8E8E93] mb-4">
-            Browse through your leads one at a time with our card-based interface
-          </p>
-          
-          {/* Bucket Selection and Controls */}
-          <div className="flex flex-wrap items-center gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor="bucket-select" className="text-sm font-medium text-[#E5E5E7]">
-                Filter by Bucket:
-              </label>
+          {/* Header Row: Title + Filter */}
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-[#FFFFFF]">Leads</h1>
+            
+            {/* Bucket Selection */}
+            <div className="flex items-center gap-3">
               <select
                 id="bucket-select"
                 value={selectedBucketId || ''}
                 onChange={(e) => handleBucketChange(e.target.value || null)}
-                className="px-3 py-2 bg-[#1C1C1E] border border-[#007AFF] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
+                className="px-3 py-1.5 bg-[#1C1C1E] border border-[#3D3D3F] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
                 disabled={bucketsError && viewMode === 'team'}
               >
                 <option value="">All Leads</option>
@@ -254,28 +273,42 @@ const Leads = () => {
                   </option>
                 ))}
               </select>
-            </div>
-            
-            <button
-              onClick={handleRefetchLeads}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-[#007AFF] text-white rounded-md hover:bg-[#0056CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-            >
-              {loading ? (
-                <>
+              
+              <button
+                onClick={() => setShowCheckpoints(!showCheckpoints)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-sm ${
+                  showCheckpoints 
+                    ? 'bg-[#FFD60A] text-black hover:bg-[#FFD60A]/80' 
+                    : 'bg-[#1C1C1E] text-[#FFD60A] border border-[#FFD60A]/30 hover:bg-[#FFD60A]/10'
+                }`}
+                title={showCheckpoints ? 'Hide Checkpoints' : 'Show Checkpoints'}
+              >
+                <svg className="w-4 h-4" fill={showCheckpoints ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <span className="hidden sm:inline">Checkpoints</span>
+              </button>
+              
+              <button
+                onClick={handleRefetchLeads}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF] text-white rounded-md hover:bg-[#0056CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+                title="Refetch Leads"
+              >
+                {loading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Loading...
-                </>
-              ) : (
-                <>
+                ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Refetch Leads
-                </>
-              )}
-            </button>
+                )}
+              </button>
+            </div>
           </div>
+          
+          <p className="text-[#8E8E93] text-sm mb-4">
+            Browse through your leads one at a time with our card-based interface
+          </p>
           
           {/* Error display */}
           {bucketsError && viewMode === 'team' && selectedTeamId && (
@@ -312,14 +345,104 @@ const Leads = () => {
         
         <LeadsContainer 
           leads={filteredLeads} 
-          updateLeadNotes={handleUpdateLeadNotes} 
-          updateLeadStatus={handleUpdateLeadStatus} 
+          updateLeadContext={handleUpdateLeadContext} 
+          updateLeadStatus={handleUpdateLeadStatus}
+          updateLeadCheckpoint={handleUpdateLeadCheckpoint}
           deleteLead={handleDeleteLead}
           moveLeadToBucket={handleMoveLeadToBucket}
           buckets={filteredBuckets}
           currentBucketId={selectedBucketId}
         />
       </div>
+      
+      {/* Checkpoints Modal */}
+      {showCheckpoints && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1C1C1E] rounded-xl max-w-lg w-full max-h-[80vh] overflow-hidden shadow-2xl border border-[#3D3D3F]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[#3D3D3F]">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-[#FFD60A]" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <h2 className="text-lg font-semibold text-white">Checkpoints</h2>
+              </div>
+              <button
+                onClick={() => setShowCheckpoints(false)}
+                className="p-1.5 text-[#8E8E93] hover:text-white hover:bg-[#2D2D2F] rounded-md transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="p-4">
+              {(() => {
+                const checkpointLeads = filteredLeads.filter(lead => lead.checkpoint);
+                if (checkpointLeads.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <svg className="w-12 h-12 text-[#3D3D3F] mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                      </svg>
+                      <p className="text-[#8E8E93]">No checkpoints set</p>
+                      <p className="text-xs text-[#4A4A4A] mt-1">Mark leads as checkpoints using the bookmark icon</p>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="space-y-4">
+                    {/* Bar Graph */}
+                    <div className="flex items-end justify-between h-24 gap-px">
+                      {filteredLeads.map((lead, index) => (
+                        <button
+                          key={lead.leadId}
+                          onClick={() => {
+                            setShowCheckpoints(false);
+                            window.dispatchEvent(new CustomEvent('navigateToLead', { detail: { index } }));
+                          }}
+                          className={`flex-1 min-w-0 transition-all hover:opacity-80 rounded-t ${
+                            lead.checkpoint 
+                              ? 'bg-[#FFD60A] h-full' 
+                              : 'bg-[#3D3D3F] h-2 self-end'
+                          }`}
+                          title={`Lead ${index + 1}${lead.checkpoint ? ' (Checkpoint)' : ''}`}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* X-axis labels - show sparse labels */}
+                    <div className="flex justify-between text-xs text-[#8E8E93]">
+                      <span>1</span>
+                      {filteredLeads.length > 2 && (
+                        <span>{Math.ceil(filteredLeads.length / 2)}</span>
+                      )}
+                      <span>{filteredLeads.length}</span>
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="flex items-center justify-center gap-4 pt-2 border-t border-[#3D3D3F]">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-[#FFD60A] rounded" />
+                        <span className="text-xs text-[#8E8E93]">Checkpoint ({checkpointLeads.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-1 bg-[#3D3D3F] rounded" />
+                        <span className="text-xs text-[#8E8E93]">Regular</span>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-[#4A4A4A] text-center">Click any bar to navigate to that lead</p>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

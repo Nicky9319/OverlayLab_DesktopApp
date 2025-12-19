@@ -6,7 +6,7 @@ import { setChatInterfaceVisible } from '../../store/slices/uiVisibilitySlice';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { createLead } from '../../../store/thunks/leadsThunks';
 import { setBuckets } from '../../../store/slices/bucketsSlice';
-import { addTeamLeadFromImage, getAllTeams, getAllTeamBuckets } from '../../../services/leadflowService';
+import { addTeamLeadFromImage, getAllTeams, getAllTeamBuckets, addImageToCollectiveSession, processCollectiveSession, deleteCollectiveSession } from '../../../services/leadflowService';
 import { fetchAllTeams } from '../../../store/thunks/teamsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
 import { setViewMode, setSelectedTeamId } from '../../../store/slices/teamsSlice';
@@ -75,6 +75,16 @@ const ActionBar = () => {
       return false;
     }
   });
+  
+  // Multi-image capture mode state
+  const [captureMode, setCaptureMode] = useState('single'); // 'single' | 'multiple'
+  const [collectedImages, setCollectedImages] = useState([]); // { id, base64Thumbnail, timestamp }
+  const MAX_COLLECTED_IMAGES = 15;
+  
+  // Refs for capture mode to avoid closure issues in event handlers
+  const captureModeRef = useRef('single');
+  const localViewModeRef = useRef('customer');
+  const collectedImagesRef = useRef([]);
   
   const position = floatingWidgetPosition || { x: 1200, y: 20 };
   const isNearRightEdge = position.x > window.innerWidth - (dynamicBarWidth + 50);
@@ -153,6 +163,12 @@ const ActionBar = () => {
         }, 2000);
       } else if (eventName === 'screenshot-error' && payload && !payload.success) {
         console.log('ActionBar: Global screenshot failed:', payload.error);
+        // Show user-friendly error message for permission issues
+        if (payload.permissionDenied) {
+          const errorMsg = payload.error || 'Screen recording permission is required. Please grant permission in System Preferences > Security & Privacy > Screen Recording.';
+          alert(errorMsg);
+          console.error('Screenshot permission denied:', errorMsg);
+        }
         setScreenshotStatus('ready');
         setGlobalShortcutFeedback(false);
       } else if (eventName === 'validate-screenshot-request' && payload) {
@@ -266,12 +282,12 @@ const ActionBar = () => {
         throw new Error('Image file is empty - cannot send to server');
       }
       
-      console.log('📤 Calling addLead API with file size:', imageFile.size, 'bytes');
+      console.log('📤 Using new two-step collective session flow with file size:', imageFile.size, 'bytes');
       
       // Check if we're in team mode (use local state for reliability)
       const currentTeamId = localSelectedTeamId || selectedTeamIdRef.current || selectedTeamId;
       if (localViewMode === 'team' && currentTeamId) {
-        // Use team-specific lead creation
+        // Use team-specific lead creation (still uses old flow for now)
         console.log('👥 Team mode detected, using team lead creation', { teamId: currentTeamId, bucketId });
         const result = await addTeamLeadFromImage(imageFile, currentTeamId, bucketId);
         
@@ -287,26 +303,41 @@ const ActionBar = () => {
           showLeadProcessingFeedback('error', { message: errorMessage });
         }
       } else {
-        // Use customer lead creation (existing flow)
-        const result = await dispatch(createLead({ imageFile, bucketId }));
+        // NEW: Use collective session flow (two-step process)
+        // Step 1: Add image to collective session
+        console.log('📤 Step 1: Adding image to collective session...');
+        const addResult = await addImageToCollectiveSession(imageFile);
         
-        console.log('📥 AddLead API Response received:');
-        console.log('- Full Response:', result);
+        console.log('📥 Add image response:', addResult);
         
-        // Check if thunk was fulfilled
-        if (createLead.fulfilled.match(result)) {
-          console.log('🎉 Lead processing initiated successfully!');
-          console.log('✅ Response Details:', result.payload);
+        if (addResult.status_code !== 200) {
+          console.error('❌ Failed to add image to session:', addResult);
+          const errorMessage = addResult?.content?.detail || 'Failed to upload image';
+          showLeadProcessingFeedback('error', { message: errorMessage });
+          return;
+        }
+        
+        console.log('✅ Image added to session successfully');
+        
+        // Step 2: Process the collective session
+        console.log('📤 Step 2: Processing collective session with bucketId:', bucketId);
+        const processResult = await processCollectiveSession(bucketId);
+        
+        console.log('📥 Process session response:', processResult);
+        
+        if (processResult.status_code === 200) {
+          console.log('🎉 Lead processing completed successfully!');
+          console.log('✅ Response Details:', processResult.content);
           
-          const successMessage = result.payload?.message || result.payload?.detail || 'Lead created successfully!';
+          const successMessage = processResult.content?.message || 'Lead created successfully!';
           console.log('📢 Success message:', successMessage);
           
           // Show success animation on floating widget
-          showLeadProcessingFeedback('success', result.payload);
+          showLeadProcessingFeedback('success', processResult.content);
         } else {
-          console.error('❌ Failed to create lead:', result.error);
+          console.error('❌ Failed to process session:', processResult);
           
-          const errorMessage = result.error || 'Failed to create lead';
+          const errorMessage = processResult?.content?.detail || processResult?.content?.error || 'Failed to process lead';
           console.log('📢 Error message:', errorMessage);
           // Show error animation on floating widget
           showLeadProcessingFeedback('error', { message: errorMessage });
@@ -431,23 +462,36 @@ const ActionBar = () => {
     
     console.log('=== END SCREENSHOT IMAGE CAPTURED EVENT ===');
     
-    // Convert image data to File and add lead
-    if (payload.imageDataUrl && currentSelectedBucketId) {
-      console.log('🚀 Starting lead creation process...');
-      console.log('📋 Lead Creation Details:', {
-        bucketId: currentSelectedBucketId,
-        bucketName: currentSelectedOption,
-        imageSize: payload.imageBlob?.size,
-        captureMethod: payload.captureMethod,
-        resolution: payload.resolution
-      });
-      addLeadFromScreenshot(payload.imageDataUrl, currentSelectedBucketId, payload);
+    // Check capture mode - handle differently for single vs multiple (use refs to avoid closure issues)
+    const currentCaptureMode = captureModeRef.current;
+    const currentViewMode = localViewModeRef.current;
+    console.log('🔍 Capture mode check:', { currentCaptureMode, currentViewMode });
+    
+    if (currentCaptureMode === 'multiple' && currentViewMode === 'customer') {
+      // Multiple mode: just add image to collection, don't process
+      if (payload.imageDataUrl) {
+        console.log('🖼️ Multiple mode: Adding image to collection...');
+        addImageToCollection(payload.imageDataUrl);
+      }
     } else {
-      console.log('⚠️ Cannot create lead - missing image data or bucket ID:', {
-        hasImageData: !!payload.imageDataUrl,
-        bucketId: currentSelectedBucketId,
-        selectedOption: currentSelectedOption
-      });
+      // Single mode: Convert image data to File and add lead (original behavior)
+      if (payload.imageDataUrl && currentSelectedBucketId) {
+        console.log('🚀 Starting lead creation process...');
+        console.log('📋 Lead Creation Details:', {
+          bucketId: currentSelectedBucketId,
+          bucketName: currentSelectedOption,
+          imageSize: payload.imageBlob?.size,
+          captureMethod: payload.captureMethod,
+          resolution: payload.resolution
+        });
+        addLeadFromScreenshot(payload.imageDataUrl, currentSelectedBucketId, payload);
+      } else {
+        console.log('⚠️ Cannot create lead - missing image data or bucket ID:', {
+          hasImageData: !!payload.imageDataUrl,
+          bucketId: currentSelectedBucketId,
+          selectedOption: currentSelectedOption
+        });
+      }
     }
     
     // Also call the existing processing function for any additional processing
@@ -860,6 +904,38 @@ const ActionBar = () => {
     };
   }, [dispatch]);
 
+  // Keep collectedImages ref in sync with state
+  useEffect(() => {
+    collectedImagesRef.current = collectedImages;
+  }, [collectedImages]);
+
+  // Cleanup collective session on app close/unload - runs once on mount
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // If we have collected images, delete the session (use ref to get current value)
+      if (collectedImagesRef.current.length > 0) {
+        console.log('ActionBar: App closing with collected images, cleaning up...');
+        // Use sendBeacon for reliable cleanup on unload (fire-and-forget)
+        deleteCollectiveSession().catch(err => {
+          console.error('ActionBar: Error cleaning up collective session on unload:', err);
+        });
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also cleanup on component unmount if there are images (use ref)
+      if (collectedImagesRef.current.length > 0) {
+        console.log('ActionBar: Component unmounting with collected images, cleaning up...');
+        deleteCollectiveSession().catch(err => {
+          console.error('ActionBar: Error cleaning up collective session on unmount:', err);
+        });
+      }
+    };
+  }, []); // Empty dependency - only run on mount/unmount
+
   // Sync local bucket state with Redux state
   useEffect(() => {
     if (buckets && Array.isArray(buckets)) {
@@ -920,6 +996,19 @@ const ActionBar = () => {
       bucketIdsRef.current = [];
     }
   }, [buckets, selectedOption, localViewMode, localSelectedTeamId]);
+
+  // Keep captureMode ref in sync with state
+  useEffect(() => {
+    captureModeRef.current = captureMode;
+    console.log('ActionBar: captureMode ref updated to:', captureMode);
+  }, [captureMode]);
+
+  // Keep localViewMode ref in sync with state  
+  useEffect(() => {
+    localViewModeRef.current = localViewMode;
+    console.log('ActionBar: localViewMode ref updated to:', localViewMode);
+  }, [localViewMode]);
+
 
   // Navigation functions for bucket selection
   const handlePreviousBucket = () => {
@@ -1180,6 +1269,116 @@ const ActionBar = () => {
     }
   };
 
+  // Handle processing multiple collected images
+  const handleProcessMultipleImages = async () => {
+    if (collectedImages.length === 0) {
+      console.log('ActionBar: No images to process');
+      return;
+    }
+    
+    console.log('ActionBar: Processing multiple images...', { count: collectedImages.length });
+    setScreenshotStatus('processing');
+    
+    try {
+      const currentBucketId = selectedBucketIdRef.current || selectedBucketId;
+      if (!currentBucketId) {
+        alert('Please select a bucket before processing');
+        setScreenshotStatus('ready');
+        if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+        return;
+      }
+      
+      const processResult = await processCollectiveSession(currentBucketId);
+      console.log('ActionBar: Process result:', processResult);
+      
+      if (processResult.status_code === 200) {
+        console.log('ActionBar: Multiple images processed successfully');
+        showLeadProcessingFeedback('success', processResult.content);
+        // Clear collected images after successful processing
+        setCollectedImages([]);
+        setScreenshotStatus('success');
+        setTimeout(() => setScreenshotStatus('ready'), 2500);
+      } else {
+        console.error('ActionBar: Failed to process multiple images:', processResult);
+        const errorMessage = processResult?.content?.detail || 'Failed to process images';
+        showLeadProcessingFeedback('error', { message: errorMessage });
+        setScreenshotStatus('ready');
+      }
+      
+      // Restore click-through after processing
+      if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+    } catch (error) {
+      console.error('ActionBar: Error processing multiple images:', error);
+      showLeadProcessingFeedback('error', { message: error.message });
+      setScreenshotStatus('ready');
+      if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+    }
+  };
+
+  // Handle canceling/deleting collected images
+  const handleCancelMultipleImages = async () => {
+    console.log('ActionBar: Canceling multiple images...');
+    
+    try {
+      const deleteResult = await deleteCollectiveSession();
+      console.log('ActionBar: Delete result:', deleteResult);
+      
+      // Clear collected images regardless of API result
+      setCollectedImages([]);
+      console.log('ActionBar: Collected images cleared');
+    } catch (error) {
+      console.error('ActionBar: Error deleting collective session:', error);
+      // Still clear local images even if API fails
+      setCollectedImages([]);
+    }
+    
+    // Restore click-through after cancel
+    if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+  };
+
+  // Add image to collection in multiple mode
+  const addImageToCollection = async (imageDataUrl) => {
+    if (collectedImages.length >= MAX_COLLECTED_IMAGES) {
+      console.log('ActionBar: Max images reached, cannot add more');
+      return false;
+    }
+    
+    try {
+      // Convert base64 to File for API call
+      const base64Data = imageDataUrl.split(',')[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'image/png' });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `screenshot-${timestamp}.png`;
+      const imageFile = new File([blob], filename, { type: 'image/png' });
+      
+      // Call API to add image to collective session
+      const addResult = await addImageToCollectiveSession(imageFile);
+      
+      if (addResult.status_code === 200) {
+        // Add to local collection for preview
+        const newImage = {
+          id: `img-${Date.now()}`,
+          base64Thumbnail: imageDataUrl,
+          timestamp: Date.now()
+        };
+        setCollectedImages(prev => [...prev, newImage]);
+        console.log('ActionBar: Image added to collection', { count: collectedImages.length + 1 });
+        return true;
+      } else {
+        console.error('ActionBar: Failed to add image to session:', addResult);
+        return false;
+      }
+    } catch (error) {
+      console.error('ActionBar: Error adding image to collection:', error);
+      return false;
+    }
+  };
+
     // Capture screenshot and save locally
   const handleActionButton = async () => {
     console.log(`ActionBar: Action button clicked with option: ${selectedOption}`);
@@ -1257,22 +1456,53 @@ const ActionBar = () => {
         const result = await screenshotAPI.captureAndSaveScreenshot();
         console.log('Screenshot captured and saved successfully.', result);
         
+        // Check for permission errors
+        if (!result.success && result.permissionDenied) {
+          const errorMsg = result.error || 'Screen recording permission is required. Please grant permission in System Preferences > Security & Privacy > Screen Recording.';
+          alert(errorMsg);
+          console.error('Screenshot permission denied:', errorMsg);
+          setScreenshotStatus('ready');
+          return;
+        }
+        
         // Process the image data directly from the IPC response
         if (result.success && result.imageData) {
           console.log('ActionBar: Processing image data from button click');
           processScreenshotInOverlay(result.imageData, result.resolution);
-        }
-        
-        // Set status to success (green)
-        setScreenshotStatus('success');
-        
-        // After 2.5 seconds, reset to ready (grey)
-        setTimeout(() => {
+          
+          // Restore click-through after screenshot
+          if (window.forceClickThroughRestore) {
+            window.forceClickThroughRestore();
+          }
+          
+          // Set status to success (green)
+          setScreenshotStatus('success');
+          
+          // After 2.5 seconds, reset to ready (grey)
+          setTimeout(() => {
+            setScreenshotStatus('ready');
+          }, 2500);
+        } else if (!result.success) {
+          // Handle other errors
+          const errorMsg = result.error || 'Failed to capture screenshot';
+          console.error('Screenshot capture failed:', errorMsg);
+          alert(`Screenshot failed: ${errorMsg}`);
           setScreenshotStatus('ready');
-        }, 2500);
+          // Restore click-through on error
+          if (window.forceClickThroughRestore) {
+            window.forceClickThroughRestore();
+          }
+        }
         
       } catch (err) {
         console.error('Failed to capture or save screenshot:', err);
+        const errorMsg = err.message || 'An unexpected error occurred while capturing screenshot';
+        alert(`Screenshot error: ${errorMsg}`);
+        
+        // Restore click-through on error
+        if (window.forceClickThroughRestore) {
+          window.forceClickThroughRestore();
+        }
         
         // On error, reset to ready after a short delay
         setTimeout(() => {
@@ -1282,6 +1512,11 @@ const ActionBar = () => {
     } else {
       console.error('Screenshot functionality is not available. electronAPI:', !!window.electronAPI, 'widgetAPI:', !!window.widgetAPI);
       alert('Screenshot functionality is not available.');
+      
+      // Restore click-through
+      if (window.forceClickThroughRestore) {
+        window.forceClickThroughRestore();
+      }
       
       // Reset status to ready
       setScreenshotStatus('ready');
@@ -1467,6 +1702,73 @@ const ActionBar = () => {
               Team
             </button>
            </div>
+
+          {/* Single/Multiple Mode Toggle - Only visible in Personal mode */}
+          {localViewMode === 'customer' && (
+            <div style={{
+              display: 'flex',
+              background: themeColors.surfaceBackground,
+              borderRadius: '6px',
+              padding: '4px',
+              border: `1px solid ${themeColors.borderColor}`,
+              gap: '4px'
+            }}>
+              <button
+                onClick={() => setCaptureMode('single')}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  fontWeight: '400',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: captureMode === 'single' ? themeColors.primaryBlue : 'transparent',
+                  color: captureMode === 'single' ? '#FFFFFF' : themeColors.secondaryText,
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  if (captureMode !== 'single') {
+                    e.target.style.background = themeColors.hoverBackground;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (captureMode !== 'single') {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                Single
+              </button>
+              <button
+                onClick={() => setCaptureMode('multiple')}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '11px',
+                  fontWeight: '400',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: captureMode === 'multiple' ? themeColors.primaryBlue : 'transparent',
+                  color: captureMode === 'multiple' ? '#FFFFFF' : themeColors.secondaryText,
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  if (captureMode !== 'multiple') {
+                    e.target.style.background = themeColors.hoverBackground;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (captureMode !== 'multiple') {
+                    e.target.style.background = 'transparent';
+                  }
+                }}
+              >
+                Multiple
+              </button>
+            </div>
+          )}
 
           {/* Team Selection (only visible in team mode and when teams are available) */}
           {localViewMode === 'team' && localTeams.length > 0 && (
@@ -1691,36 +1993,38 @@ const ActionBar = () => {
 
             <button
               onClick={handleActionButton}
-              disabled={screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option'}
+              disabled={screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES)}
               style={{
-                background: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option') ? '#6B7280' : themeColors.primaryBlue,
+                background: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES)) ? '#6B7280' : themeColors.primaryBlue,
                 border: 'none',
                 borderRadius: '6px',
                 padding: '8px 16px',
                 color: themeColors.primaryText,
                 fontSize: '12px',
                 fontWeight: '600',
-                cursor: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option') ? 'not-allowed' : 'pointer',
+                cursor: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES)) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
                 whiteSpace: 'nowrap',
-                opacity: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option') ? 0.7 : 1
+                opacity: (screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES)) ? 0.7 : 1
               }}
               onMouseEnter={(e) => {
-                if (screenshotStatus !== 'processing' && selectedOption && selectedOption !== 'Select Option') {
+                const isDisabled = screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES);
+                if (!isDisabled) {
                   e.target.style.background = '#0056CC';
                   e.target.style.transform = 'scale(1.05)';
                   e.target.style.boxShadow = '0 4px 12px rgba(0, 122, 255, 0.4)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (screenshotStatus !== 'processing' && selectedOption && selectedOption !== 'Select Option') {
+                const isDisabled = screenshotStatus === 'processing' || !selectedOption || selectedOption === 'Select Option' || (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES);
+                if (!isDisabled) {
                   e.target.style.background = themeColors.primaryBlue;
                   e.target.style.transform = 'scale(1)';
                   e.target.style.boxShadow = 'none';
                 }
               }}
             >
-              {screenshotStatus === 'processing' ? 'Taking...' : 'Add'}
+              {screenshotStatus === 'processing' ? 'Taking...' : (captureMode === 'multiple' && collectedImages.length >= MAX_COLLECTED_IMAGES) ? 'Max' : 'Add'}
             </button>
           </div>
 
@@ -1767,6 +2071,174 @@ const ActionBar = () => {
             </button>
           )}
         </div>
+
+        {/* Multi-Image Preview Panel - Only visible in multiple mode with images */}
+        {captureMode === 'multiple' && localViewMode === 'customer' && (
+          <HoverComponent style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            marginTop: '8px',
+            background: themeColors.primaryBackground,
+            backdropFilter: 'blur(10px)',
+            borderRadius: '8px',
+            padding: '8px',
+            boxShadow: '0 6px 24px rgba(0, 0, 0, 0.4)',
+            border: `1px solid ${themeColors.borderColor}`,
+            minWidth: '200px'
+          }}>
+            {/* Header with count and actions */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: collectedImages.length > 0 ? '8px' : '0'
+            }}>
+              <span style={{
+                color: themeColors.secondaryText,
+                fontSize: '10px',
+                fontWeight: '500'
+              }}>
+                Images: {collectedImages.length}/{MAX_COLLECTED_IMAGES}
+              </span>
+              
+              {collectedImages.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={handleProcessMultipleImages}
+                    style={{
+                      background: '#10B981',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 10px',
+                      color: '#FFFFFF',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#059669';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = '#10B981';
+                    }}
+                  >
+                    Process
+                  </button>
+                  <button
+                    onClick={handleCancelMultipleImages}
+                    style={{
+                      background: '#EF4444',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 10px',
+                      color: '#FFFFFF',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#DC2626';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = '#EF4444';
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Scrollable image thumbnails */}
+            {collectedImages.length > 0 && (
+              <div style={{
+                display: 'flex',
+                gap: '6px',
+                overflowX: 'auto',
+                paddingBottom: '4px',
+                scrollbarWidth: 'thin',
+                scrollbarColor: `${themeColors.borderColor} transparent`
+              }}>
+                <style>
+                  {`
+                    .multi-image-scroll::-webkit-scrollbar {
+                      height: 6px;
+                    }
+                    .multi-image-scroll::-webkit-scrollbar-track {
+                      background: transparent;
+                      border-radius: 3px;
+                    }
+                    .multi-image-scroll::-webkit-scrollbar-thumb {
+                      background: ${themeColors.borderColor};
+                      border-radius: 3px;
+                    }
+                    .multi-image-scroll::-webkit-scrollbar-thumb:hover {
+                      background: ${themeColors.secondaryText};
+                    }
+                  `}
+                </style>
+                <div className="multi-image-scroll" style={{
+                  display: 'flex',
+                  gap: '6px',
+                  overflowX: 'auto',
+                  paddingBottom: '4px'
+                }}>
+                  {collectedImages.map((img, index) => (
+                    <div
+                      key={img.id}
+                      style={{
+                        flexShrink: 0,
+                        width: '60px',
+                        height: '40px',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                        border: `1px solid ${themeColors.borderColor}`,
+                        position: 'relative'
+                      }}
+                    >
+                      <img
+                        src={img.base64Thumbnail}
+                        alt={`Screenshot ${index + 1}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
+                        }}
+                      />
+                      <span style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        right: '2px',
+                        background: 'rgba(0,0,0,0.7)',
+                        color: '#fff',
+                        fontSize: '8px',
+                        padding: '1px 3px',
+                        borderRadius: '2px'
+                      }}>
+                        {index + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {collectedImages.length === 0 && (
+              <div style={{
+                color: themeColors.secondaryText,
+                fontSize: '10px',
+                textAlign: 'center',
+                padding: '8px 0'
+              }}>
+                Take screenshots to collect images
+              </div>
+            )}
+          </HoverComponent>
+        )}
       </div>
 
 

@@ -4,12 +4,14 @@ import HoverComponent from '../common/components/HoverComponent';
 import { themeColors } from '../common/utils/colors';
 import { 
   toggleAllWidgets, 
-  clearMessageCount
+  clearMessageCount,
+  setActionBarCollapsed
 } from '../../store/slices/uiVisibilitySlice';
 import { setPosition } from '../../store/slices/floatingWidgetSlice';
 
 const FloatingWidget = () => {
   const messageCount = useSelector((state) => state.uiVisibility.messageCount);
+  const actionBarCollapsed = useSelector((state) => state.uiVisibility.actionBarCollapsed);
   const position = useSelector((state) => state.floatingWidget.position);
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
@@ -19,6 +21,7 @@ const FloatingWidget = () => {
   const [screenshotAnimation, setScreenshotAnimation] = useState('idle'); // 'idle', 'processing', 'success'
   const [leadProcessingStatus, setLeadProcessingStatus] = useState('idle'); // 'idle', 'processing', 'success', 'error'
   const dispatch = useDispatch();
+
 
   // Debug: Log when component mounts
   useEffect(() => {
@@ -157,6 +160,13 @@ const FloatingWidget = () => {
     setIsHovered(false);
   };
 
+  // Handle toggle button click
+  const handleToggleActionBar = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dispatch(setActionBarCollapsed(!actionBarCollapsed));
+  };
+
   // Drag functionality
   const handleMouseDown = (e) => {
     // Only start dragging if clicking on the widget itself, not on buttons or other elements
@@ -170,6 +180,20 @@ const FloatingWidget = () => {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top
     });
+    
+    // Disable click-through when dragging starts (important for macOS)
+    // This allows the window to receive mouse events during drag
+    try {
+      if (window && window.widgetAPI && window.widgetAPI.disableClickThrough) {
+        window.widgetAPI.disableClickThrough();
+        console.log('FloatingWidget: Disabled click-through for dragging');
+      } else if (window && window.electronAPI && window.electronAPI.setIgnoreMouseEvents) {
+        window.electronAPI.setIgnoreMouseEvents(false);
+        console.log('FloatingWidget: Disabled click-through for dragging (via electronAPI)');
+      }
+    } catch (error) {
+      console.error('FloatingWidget: Error disabling click-through for drag:', error);
+    }
   };
 
   const handleMouseMove = (e) => {
@@ -211,6 +235,23 @@ const FloatingWidget = () => {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    
+    // Re-enable click-through after drag ends (important for macOS)
+    // Use a small delay to allow click events to process first
+    setTimeout(() => {
+      try {
+        if (window && window.widgetAPI && window.widgetAPI.enableClickThrough) {
+          window.widgetAPI.enableClickThrough();
+          console.log('FloatingWidget: Re-enabled click-through after drag');
+        } else if (window && window.electronAPI && window.electronAPI.setIgnoreMouseEvents) {
+          window.electronAPI.setIgnoreMouseEvents(true);
+          console.log('FloatingWidget: Re-enabled click-through after drag (via electronAPI)');
+        }
+      } catch (error) {
+        console.error('FloatingWidget: Error re-enabling click-through after drag:', error);
+      }
+    }, 50); // Small delay to allow click events to process
+    
     // Reset hasDragged after a short delay to allow click to be processed
     setTimeout(() => {
       setHasDragged(false);
@@ -447,6 +488,63 @@ const FloatingWidget = () => {
                   zIndex: 1
                 }}
               />
+
+              {/* Toggle button for ActionBar collapse/expand */}
+              <button
+                onClick={handleToggleActionBar}
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  position: 'absolute',
+                  bottom: '2px',
+                  right: '2px',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  background: themeColors.surfaceBackground,
+                  border: `1px solid ${themeColors.borderColor}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  padding: 0,
+                  zIndex: 10,
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+                  transition: 'all 0.2s ease',
+                  pointerEvents: 'auto'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = themeColors.hoverBackground;
+                  e.target.style.transform = 'scale(1.1)';
+                  e.target.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = themeColors.surfaceBackground;
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
+                }}
+                title={actionBarCollapsed ? 'Expand Action Bar' : 'Collapse Action Bar'}
+              >
+                <svg 
+                  width="8" 
+                  height="8" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke={themeColors.primaryText} 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  style={{
+                    transform: actionBarCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease'
+                  }}
+                >
+                  {actionBarCollapsed ? (
+                    <polyline points="18,15 12,9 6,15"></polyline>
+                  ) : (
+                    <polyline points="6,9 12,15 18,9"></polyline>
+                  )}
+                </svg>
+              </button>
             </div>
           </HoverComponent>
         </div>
