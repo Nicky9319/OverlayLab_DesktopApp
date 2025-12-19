@@ -672,6 +672,52 @@ const updateLeadContext = async (leadId, context) => {
 };
 
 /**
+ * Update lead platform status
+ * @param {string} leadId - ID of the lead to update
+ * @param {string} platform - Platform name (linkedin, insta, x, email, pinterest, artstation, youtube)
+ * @param {string} status - New status for the platform
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateLeadPlatformStatus = async (leadId, platform, status) => {
+  logger.info('updateLeadPlatformStatus called', { leadId, platform, status });
+  
+  if (!leadId || !platform || !status) {
+    return { status_code: 400, content: { detail: 'lead_id, platform, and status are required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/leads/update-lead-platform-status', {
+    method: 'PUT',
+    body: JSON.stringify({ lead_id: leadId, platform, status }),
+  });
+
+  logger.info('updateLeadPlatformStatus: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
+ * Update lead platform reached out status
+ * @param {string} leadId - ID of the lead to update
+ * @param {string} platform - Platform name (linkedin, insta, x, email, pinterest, artstation, youtube)
+ * @param {boolean} reachedOut - Whether the lead has been reached out to on this platform
+ * @returns {Promise<Object>} Response with status_code and content
+ */
+const updateLeadPlatformReachedOut = async (leadId, platform, reachedOut) => {
+  logger.info('updateLeadPlatformReachedOut called', { leadId, platform, reachedOut });
+  
+  if (!leadId || !platform || reachedOut === undefined || reachedOut === null) {
+    return { status_code: 400, content: { detail: 'lead_id, platform, and reached_out are required' } };
+  }
+
+  const resp = await request('/api/leadflow-service/leads/update-lead-platform-reached-out', {
+    method: 'PUT',
+    body: JSON.stringify({ lead_id: leadId, platform, reached_out: reachedOut }),
+  });
+
+  logger.info('updateLeadPlatformReachedOut: Completed', { status: resp.status_code });
+  return resp;
+};
+
+/**
  * Update lead checkpoint
  * @param {string} leadId - ID of the lead to update
  * @param {boolean} checkpoint - Checkpoint value (true/false)
@@ -1708,6 +1754,8 @@ export {
   updateLeadStatus, 
   updateLeadContext, 
   updateLeadCheckpoint,
+  updateLeadPlatformStatus,
+  updateLeadPlatformReachedOut,
   addLead,  // Deprecated - use collective session functions
   deleteLead, 
   moveLeadToBucket 
