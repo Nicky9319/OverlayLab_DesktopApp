@@ -276,54 +276,20 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
           : 'opacity-0 scale-95 translate-x-4 pointer-events-none'
       }`}
     >
-      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
+      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
         
-        {/* Top Row: Actions */}
-        <div className="flex items-center justify-end gap-2 mb-3">
-          {/* Checkpoint Toggle */}
-          <button
-            onClick={() => updateLeadCheckpoint && updateLeadCheckpoint(lead.leadId, !lead.checkpoint)}
-            className={`p-1.5 rounded transition-colors ${
-              lead.checkpoint 
-                ? 'text-[#FFD60A] bg-[#FFD60A]/10 hover:bg-[#FFD60A]/20' 
-                : 'text-[#8E8E93] hover:text-[#FFD60A] hover:bg-[#1C1C1E]'
-            }`}
-            title={lead.checkpoint ? 'Remove checkpoint' : 'Mark as checkpoint'}
-          >
-            <svg className="w-4 h-4" fill={lead.checkpoint ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-            </svg>
-          </button>
-          {buckets.length > 1 && (
-            <BucketSelector
-              buckets={buckets}
-              currentBucketId={currentBucketId}
-              onBucketChange={moveLeadToBucket}
-              leadId={lead.leadId}
-              className="flex items-center"
-            />
-          )}
-          <button
-            onClick={handleDeleteClick}
-            className="p-1.5 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded transition-colors"
-            title="Delete lead"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Platform Tabs - At the top */}
-        <div className="mb-4">
-          <div className="flex items-end gap-3 mb-2 overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full">
+        {/* Top Row: Social Media Icons and Actions in same line */}
+        <div className="flex items-center justify-between mb-4" style={{ overflow: 'visible' }}>
+          {/* Platform Tabs - Left side */}
+          <div className="flex-1 min-w-0" style={{ overflow: 'visible' }}>
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 pr-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full" style={{ overflow: 'visible', paddingTop: '4px', paddingBottom: '4px' }}>
             {platforms.map((platform) => {
               const reachedOut = lead[platform.reachedOutField] || false;
               const isActive = activeTab === platform.key;
               const hasUrl = lead[platform.urlField];
               
               return (
-                <div key={platform.key} className="relative flex-shrink-0 group flex flex-col items-center">
+                <div key={platform.key} className="relative flex-shrink-0 group flex flex-col items-center" style={{ overflow: 'visible', padding: '2px' }}>
                   <button
                     onClick={() => {
                       if (hasUrl) {
@@ -333,6 +299,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
                     disabled={!hasUrl}
                     className={`${getPlatformButtonClass(platform.key, isActive)} ${!hasUrl ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                     title={hasUrl ? platform.name : `${platform.name} (No URL)`}
+                    style={{ overflow: 'visible' }}
                   >
                     {getPlatformIcon(platform.icon)}
                   </button>
@@ -353,6 +320,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
                           : 'bg-[#2D2D2F] hover:bg-[#3D3D3F] opacity-80 hover:opacity-100'
                       }`}
                       title={reachedOut ? 'Mark as not reached out' : 'Mark as reached out'}
+                      style={{ overflow: 'visible' }}
                     >
                       {reachedOut ? (
                         <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -368,10 +336,48 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
                 </div>
               );
             })}
+            </div>
           </div>
 
-          {/* Tab Content - Only show if platform has URL */}
-          {currentPlatform && lead[currentPlatform.urlField] && (
+          {/* Actions - Right side */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Checkpoint Toggle */}
+            <button
+              onClick={() => updateLeadCheckpoint && updateLeadCheckpoint(lead.leadId, !lead.checkpoint)}
+              className={`p-1.5 rounded transition-colors ${
+                lead.checkpoint 
+                  ? 'text-[#FFD60A] bg-[#FFD60A]/10 hover:bg-[#FFD60A]/20' 
+                  : 'text-[#8E8E93] hover:text-[#FFD60A] hover:bg-[#1C1C1E]'
+              }`}
+              title={lead.checkpoint ? 'Remove checkpoint' : 'Mark as checkpoint'}
+            >
+              <svg className="w-4 h-4" fill={lead.checkpoint ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+            </button>
+            {buckets.length > 1 && (
+              <BucketSelector
+                buckets={buckets}
+                currentBucketId={currentBucketId}
+                onBucketChange={moveLeadToBucket}
+                leadId={lead.leadId}
+                className="flex items-center"
+              />
+            )}
+            <button
+              onClick={handleDeleteClick}
+              className="p-1.5 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded transition-colors"
+              title="Delete lead"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content - Only show if platform has URL */}
+        {currentPlatform && lead[currentPlatform.urlField] && (
             <div className="bg-[#1C1C1E] rounded-md p-3">
               {/* URL Display */}
               <div className="mb-3">
@@ -464,7 +470,6 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
               </div>
             </div>
           )}
-        </div>
 
         {/* Company and Context - At the bottom */}
         <div className="space-y-2 mt-4">
