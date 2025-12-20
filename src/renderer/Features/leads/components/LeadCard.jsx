@@ -1,15 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import BucketSelector from './BucketSelector';
+import { useDispatch } from 'react-redux';
+import { updateLeadPlatformStatus, updateLeadPlatformReachedOut } from '../../../../store/thunks/leadsThunks';
 
 const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateLeadCheckpoint, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
+  const dispatch = useDispatch();
   const [isEditingContext, setIsEditingContext] = useState(false);
   const [editedContext, setEditedContext] = useState('');
   const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [editedStatus, setEditedStatus] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [copiedUrl, setCopiedUrl] = useState(null); // Track which URL was just copied
+  const [copiedUrl, setCopiedUrl] = useState(null);
+  const [activeTab, setActiveTab] = useState(null); // Platform name for active tab
 
   if (!lead) return null;
+
+  // Define platform configuration
+  const platforms = useMemo(() => [
+    { key: 'linkedin', urlField: 'linkedinUrl', statusField: 'linkedinStatus', reachedOutField: 'linkedinReachedOut', name: 'LinkedIn', icon: 'linkedin' },
+    { key: 'insta', urlField: 'instaUrl', statusField: 'instaStatus', reachedOutField: 'instaReachedOut', name: 'Instagram', icon: 'insta' },
+    { key: 'x', urlField: 'xUrl', statusField: 'xStatus', reachedOutField: 'xReachedOut', name: 'X', icon: 'x' },
+    { key: 'email', urlField: 'email', statusField: 'emailStatus', reachedOutField: 'emailReachedOut', name: 'Email', icon: 'email' },
+    { key: 'pinterest', urlField: 'pinterestUrl', statusField: 'pinterestStatus', reachedOutField: 'pinterestReachedOut', name: 'Pinterest', icon: 'pinterest' },
+    { key: 'artstation', urlField: 'artstationUrl', statusField: 'artstationStatus', reachedOutField: 'artstationReachedOut', name: 'ArtStation', icon: 'artstation' },
+    { key: 'youtube', urlField: 'youtubeUrl', statusField: 'youtubeStatus', reachedOutField: 'youtubeReachedOut', name: 'YouTube', icon: 'youtube' },
+  ], []);
+
+  // Show all platforms, but prioritize those with URLs for initial tab
+  const availablePlatforms = useMemo(() => {
+    return platforms.filter(p => lead[p.urlField]);
+  }, [lead, platforms]);
+
+  // Set initial active tab to first available platform (with URL)
+  React.useEffect(() => {
+    if (availablePlatforms.length > 0 && !activeTab) {
+      setActiveTab(availablePlatforms[0].key);
+    }
+  }, [availablePlatforms, activeTab]);
+
+  // Get current platform data
+  const currentPlatform = useMemo(() => {
+    return platforms.find(p => p.key === activeTab);
+  }, [activeTab, platforms]);
 
   const handleContextEdit = () => {
     setIsEditingContext(true);
@@ -37,18 +69,21 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
     }
   };
 
-  // Status editing functions
+  // Platform-specific status editing functions
   const handleStatusEdit = () => {
+    if (!currentPlatform) return;
+    const currentStatus = lead[currentPlatform.statusField] || 'Cold Message';
     setIsEditingStatus(true);
-    setEditedStatus(lead.status || '');
+    setEditedStatus(currentStatus);
   };
 
   const handleStatusSave = () => {
+    if (!currentPlatform) return;
     if (updateLeadStatus) {
-      updateLeadStatus(lead.leadId, editedStatus);
+      // Use the new platform-specific update function
+      dispatch(updateLeadPlatformStatus({ leadId: lead.leadId, platform: currentPlatform.key, status: editedStatus }));
     }
-    // Function call when status is saved
-    console.log('Status updated for lead:', lead.leadId, 'New status:', editedStatus);
+    console.log('Platform status updated for lead:', lead.leadId, 'Platform:', currentPlatform.key, 'New status:', editedStatus);
     setIsEditingStatus(false);
   };
 
@@ -65,13 +100,13 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
     }
   };
 
-  const handleLinkClick = (url) => {
-    // Use electron's shell to open URL in default browser
+  const handleLinkClick = (url, isEmail = false) => {
+    const finalUrl = isEmail && !url.startsWith('mailto:') ? `mailto:${url}` : url;
+    
     if (window.electronAPI && window.electronAPI.openExternal) {
-      window.electronAPI.openExternal(url);
+      window.electronAPI.openExternal(finalUrl);
     } else {
-      // Fallback for development or if electronAPI is not available
-      console.log('Would open URL:', url);
+      console.log('Would open URL:', finalUrl);
     }
   };
 
@@ -90,73 +125,26 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
     setShowDeleteConfirm(false);
   };
 
-  // Copy URL to clipboard with feedback
   const handleCopyUrl = async (url) => {
     try {
       await navigator.clipboard.writeText(url);
       setCopiedUrl(url);
-      setTimeout(() => setCopiedUrl(null), 2000); // Reset after 2 seconds
+      setTimeout(() => setCopiedUrl(null), 2000);
     } catch (err) {
       console.error('Failed to copy URL:', err);
     }
   };
 
-  // Check if lead has any social profile URL
-  const hasSocialProfiles = lead.linkedinUrl || lead.instaUrl || lead.xUrl;
-
-  // SocialLink helper component for rendering social profile rows
-  const SocialLink = ({ platform, url, username }) => {
-    if (!url) return null;
+  const handleReachedOutToggle = (platformKey) => {
+    const platform = platforms.find(p => p.key === platformKey);
+    if (!platform) return;
     
-    const displayUrl = url.replace('https://', '').replace('http://', '');
-    const isCopied = copiedUrl === url;
-    
-    return (
-      <div className="flex items-center justify-between py-1.5 px-2 hover:bg-[#1C1C1E] rounded-md group transition-colors">
-        <div className="flex items-center flex-1 min-w-0">
-          <span className="mr-2 flex-shrink-0">
-            {getPlatformIcon(platform)}
-          </span>
-          <button 
-            onClick={() => handleLinkClick(url)}
-            className="text-[#007AFF] hover:text-[#0056CC] truncate cursor-pointer transition-colors text-xs text-left"
-            title="Open in browser"
-          >
-            {displayUrl}
-          </button>
-        </div>
-        <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => handleCopyUrl(url)}
-            className={`p-1 rounded transition-colors ${
-              isCopied 
-                ? 'text-[#00D09C] bg-[#00D09C]/10' 
-                : 'text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F]'
-            }`}
-            title={isCopied ? 'Copied!' : 'Copy URL'}
-          >
-            {isCopied ? (
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-            )}
-          </button>
-          <button
-            onClick={() => handleLinkClick(url)}
-            className="p-1 text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F] rounded transition-colors"
-            title="Open in browser"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    );
+    const currentReachedOut = lead[platform.reachedOutField] || false;
+    dispatch(updateLeadPlatformReachedOut({ 
+      leadId: lead.leadId, 
+      platform: platformKey, 
+      reachedOut: !currentReachedOut 
+    }));
   };
 
   const getStatusColor = (status) => {
@@ -171,7 +159,6 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
         return 'bg-[#00D09C] text-white';
       case 'closed':
         return 'bg-[#FF3B30] text-white';
-      // Legacy status support
       case 'qualified':
         return 'bg-[#00D09C] text-white';
       case 'contacted':
@@ -183,75 +170,103 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
     }
   };
 
-  const getPlatformIcon = (platform) => {
-    switch (platform?.toLowerCase()) {
+  const getPlatformIcon = (platformKey) => {
+    const platform = platforms.find(p => p.key === platformKey);
+    if (!platform) return null;
+
+    switch (platform.icon) {
       case 'linkedin':
         return (
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#0A66C2">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
             <path d="M22.46 0H1.54C.69 0 0 .69 0 1.54v20.92C0 23.31.69 24 1.54 24h20.92c.85 0 1.54-.69 1.54-1.54V1.54C24 .69 23.31 0 22.46 0zM7.11 20.45H3.56V9h3.55v11.45zM5.34 7.43c-1.14 0-2.06-.93-2.06-2.06s.92-2.06 2.06-2.06 2.06.93 2.06 2.06-.92 2.06-2.06 2.06zM20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.47-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28z"/>
           </svg>
         );
       case 'insta':
         return (
-          <div className="w-5 h-5 rounded-lg bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.43.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.43.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.43-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.43-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0-2.16c-3.26 0-3.67.01-4.95.07-1.28.06-2.16.27-2.93.57-.79.31-1.46.72-2.13 1.39-.67.67-1.08 1.34-1.39 2.13-.3.77-.51 1.65-.57 2.93-.06 1.28-.07 1.69-.07 4.95s.01 3.67.07 4.95c.06 1.28.27 2.16.57 2.93.31.79.72 1.46 1.39 2.13.67.67 1.34 1.08 2.13 1.39.77.3 1.65.51 2.93.57 1.28.06 1.69.07 4.95.07s3.67-.01 4.95-.07c1.28-.06 2.16-.27 2.93-.57.79-.31 1.46-.72 2.13-1.39.67-.67 1.08-1.34 1.39-2.13.3-.77.51-1.65.57-2.93.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.28-.27-2.16-.57-2.93-.31-.79-.72-1.46-1.39-2.13-.67-.67-1.34-1.08-2.13-1.39-.77-.3-1.65-.51-2.93-.57C15.67.01 15.26 0 12 0z"/>
-              <path d="M12 5.84c-3.4 0-6.16 2.76-6.16 6.16s2.76 6.16 6.16 6.16 6.16-2.76 6.16-6.16-2.76-6.16-6.16-6.16zm0 10.15c-2.2 0-3.99-1.79-3.99-3.99s1.79-3.99 3.99-3.99 3.99 1.79 3.99 3.99-1.79 3.99-3.99 3.99z"/>
-              <circle cx="18.41" cy="5.59" r="1.44"/>
-            </svg>
-          </div>
-        );
-      case 'reddit':
-        return (
-          <div className="w-5 h-5 bg-[#FF4500] rounded-full flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M14.238 15.348c.085-.084.085-.221 0-.306-.465-.462-1.194-.687-2.238-.687s-1.773.225-2.238.687c-.085.085-.085.222 0 .306.084.085.222.085.306 0 .31-.31.937-.462 1.932-.462s1.622.152 1.932.462c.084.085.222.085.306 0z"/>
-              <path d="M19.25 11.5c0-1.171-.949-2.12-2.12-2.12-.696 0-1.316.34-1.705.864-1.678-1.188-3.991-1.951-6.551-2.049l1.115-5.249 3.648.777c.018 1.016.847 1.835 1.872 1.835 1.034 0 1.888-.867 1.888-1.888 0-1.034-.854-1.888-1.888-1.888-.736 0-1.369.405-1.696 1.006l-4.108-.875c-.128-.027-.263.036-.306.178l-1.257 5.922C4.754 7.227 2.279 8.033.498 9.505c-.355-.487-.927-.811-1.596-.811-1.171 0-2.120.949-2.120 2.120 0 .855.506 1.588 1.233 1.932-.018.197-.018.412 0 .627 0 3.204 3.730 5.8 8.314 5.8s8.314-2.596 8.314-5.8c.018-.215.018-.43 0-.627.727-.344 1.233-1.077 1.233-1.932zM4.609 13.231c0-1.034.854-1.888 1.888-1.888s1.888.854 1.888 1.888-.854 1.888-1.888 1.888-1.888-.854-1.888-1.888zm10.225 4.906c-1.678 1.678-4.906 1.678-6.584 0-.128-.128-.128-.335 0-.463.128-.128.335-.128.463 0 1.422 1.422 4.236 1.422 5.658 0 .128-.128.335-.128.463 0 .128.128.128.335 0 .463zm-.036-3.018c-1.034 0-1.888-.854-1.888-1.888s.854-1.888 1.888-1.888 1.888.854 1.888 1.888-.854 1.888-1.888 1.888z"/>
-            </svg>
-          </div>
-        );
-      case 'behance':
-        return (
-          <div className="w-5 h-5 bg-[#1769FF] rounded flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M6.938 4.503c.702 0 1.34.06 1.92.188.577.13 1.07.33 1.485.61.41.28.733.65.96 1.12.225.47.34 1.05.34 1.73 0 .74-.17 1.36-.507 1.86-.338.5-.837.9-1.497 1.19.9.26 1.555.67 1.96 1.22.404.55.61 1.24.61 2.06 0 .75-.13 1.39-.41 1.93-.28.55-.67 1-1.16 1.35-.48.348-1.05.6-1.67.76-.62.16-1.24.24-1.84.24H0V4.51h6.938v-.007zM3.495 8.458h2.77c.645 0 1.12-.075 1.43-.24.31-.16.47-.45.47-.86 0-.23-.045-.41-.135-.56-.09-.15-.211-.27-.368-.35-.157-.08-.34-.14-.55-.18-.21-.04-.433-.06-.67-.06H3.495v2.25zm0 4.523h3.03c.29 0 .55-.02.77-.075.22-.055.41-.14.58-.26.17-.12.29-.27.38-.45.09-.18.135-.39.135-.624 0-.505-.18-.865-.54-1.08-.36-.21-.87-.32-1.53-.32H3.495v2.81zm11.174-2.742h5.308c-.077-.866-.272-1.45-.585-1.756-.31-.305-.72-.458-1.23-.458-.59 0-1.064.16-1.414.48-.35.32-.605.77-.762 1.35-.157-.58-.27-1.03-.317-1.616zm2.05-3.95c.72 0 1.36.128 1.92.383.56.256 1.025.6 1.39 1.035.37.435.64.95.82 1.546.18.596.27 1.23.27 1.9v.435h-7.69c.044.866.31 1.527.795 1.983.49.456 1.05.684 1.69.684.435 0 .84-.06 1.215-.18.375-.12.69-.285.945-.495l.615 1.08c-.39.27-.87.49-1.44.66-.57.17-1.145.255-1.725.255-1.38 0-2.49-.405-3.33-1.215-.84-.81-1.26-1.95-1.26-3.42 0-.735.135-1.41.405-2.025.27-.615.64-1.14 1.11-1.575.47-.435 1.02-.77 1.65-.995.63-.225 1.29-.338 1.98-.338z"/>
-            </svg>
-          </div>
-        );
-      case 'pinterest':
-        return (
-          <div className="w-5 h-5 bg-[#E60023] rounded-full flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.041-3.439.219-.937 1.404-5.965 1.404-5.965s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.402.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.357-.629-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24.009 12.017 24.009c6.624 0 11.99-5.367 11.99-12.014C24.007 5.367 18.641.001 12.017.001z"/>
-            </svg>
-          </div>
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.43.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.43.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.43-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.43-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0-2.16c-3.26 0-3.67.01-4.95.07-1.28.06-2.16.27-2.93.57-.79.31-1.46.72-2.13 1.39-.67.67-1.08 1.34-1.39 2.13-.3.77-.51 1.65-.57 2.93-.06 1.28-.07 1.69-.07 4.95s.01 3.67.07 4.95c.06 1.28.27 2.16.57 2.93.31.79.72 1.46 1.39 2.13.67.67 1.34 1.08 2.13 1.39.77.3 1.65.51 2.93.57 1.28.06 1.69.07 4.95.07s3.67-.01 4.95-.07c1.28-.06 2.16-.27 2.93-.57.79-.31 1.46-.72 2.13-1.39.67-.67 1.08-1.34 1.39-2.13.3-.77.51-1.65.57-2.93.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.28-.27-2.16-.57-2.93-.31-.79-.72-1.46-1.39-2.13-.67-.67-1.34-1.08-2.13-1.39-.77-.3-1.65-.51-2.93-.57C15.67.01 15.26 0 12 0z"/>
+            <path d="M12 5.84c-3.4 0-6.16 2.76-6.16 6.16s2.76 6.16 6.16 6.16 6.16-2.76 6.16-6.16-2.76-6.16-6.16-6.16zm0 10.15c-2.2 0-3.99-1.79-3.99-3.99s1.79-3.99 3.99-3.99 3.99 1.79 3.99 3.99-1.79 3.99-3.99 3.99z"/>
+            <circle cx="18.41" cy="5.59" r="1.44"/>
+          </svg>
         );
       case 'x':
         return (
-          <div className="w-5 h-5 bg-black rounded flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-            </svg>
-          </div>
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
         );
       case 'email':
         return (
-          <div className="w-5 h-5 bg-[#EA4335] rounded flex items-center justify-center">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="white">
-              <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h3.819v.545L12 10.455l6.545-6.089v-.545h3.819c.904 0 1.636.732 1.636 1.636z"/>
-            </svg>
-          </div>
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-.904.732-1.636 1.636-1.636h3.819v.545L12 10.455l6.545-6.089v-.545h3.819c.904 0 1.636.732 1.636 1.636z"/>
+          </svg>
+        );
+      case 'pinterest':
+        return (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.174-.105-.949-.199-2.403.041-3.439.219-.937 1.404-5.965 1.404-5.965s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.402.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.357-.629-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24.009 12.017 24.009c6.624 0 11.99-5.367 11.99-12.014C24.007 5.367 18.641.001 12.017.001z"/>
+          </svg>
+        );
+      case 'artstation':
+        return (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M0 17.723l2.027 3.505h.001l2.027-3.505H0zm24 .099l-2.121 3.636h-.001l-2.122-3.636h4.244zm-9.364-3.48L10.727 24h-2.97l4.244-7.401 1.598 2.576 1.597-2.576zm2.193-3.777l3.498 6.004-3.498-6.004h3.497l.001-.001H15.93zm-5.75 0l3.5 6.004-3.5-6.004h3.5l-.001-.001H10.18zm-5.75 0l3.5 6.004-3.5-6.004H8.43l-.001-.001H4.43zm12.696-3.9l-1.599 2.576-1.597 2.576-2.122-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-8.843 0l-1.599 2.576-1.598 2.576-2.121-3.636h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97zm-5.75 0l-1.599 2.576-1.598 2.576L0 4.787h2.97l2.121 3.636h.001l2.121-3.636h2.97l-2.122 3.636-1.599-2.576-1.598 2.576-2.121-3.636h2.97z"/>
+          </svg>
+        );
+      case 'youtube':
+        return (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
         );
       default:
-        return (
-          <div className="w-5 h-5 bg-[#8E8E93] rounded flex items-center justify-center">
-            <svg className="w-3 h-3" fill="white" viewBox="0 0 24 24">
-              <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"/>
-            </svg>
-          </div>
-        );
+        return null;
     }
   };
+
+  const getPlatformButtonClass = (platformKey, isActive) => {
+    const platform = platforms.find(p => p.key === platformKey);
+    if (!platform) return '';
+    
+    const reachedOut = lead[platform.reachedOutField] || false;
+    const hasUrl = lead[platform.urlField];
+    const baseClass = 'w-8 h-8 rounded-lg flex items-center justify-center transition-all relative';
+    const activeClass = isActive ? 'scale-110' : '';
+    const disabledClass = !hasUrl ? 'opacity-50' : '';
+    
+    let colorClass = '';
+    switch (platform.icon) {
+      case 'linkedin':
+        colorClass = hasUrl ? 'bg-[#0A66C2] hover:bg-[#004182]' : 'bg-[#2D2D2F]';
+        break;
+      case 'insta':
+        colorClass = hasUrl ? 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 hover:opacity-80' : 'bg-[#2D2D2F]';
+        break;
+      case 'x':
+        colorClass = hasUrl ? 'bg-black hover:bg-[#1a1a1a] border border-[#3D3D3F]' : 'bg-[#2D2D2F]';
+        break;
+      case 'email':
+        colorClass = hasUrl ? 'bg-[#EA4335] hover:bg-[#D33B2C]' : 'bg-[#2D2D2F]';
+        break;
+      case 'pinterest':
+        colorClass = hasUrl ? 'bg-[#E60023] hover:bg-[#CC001F]' : 'bg-[#2D2D2F]';
+        break;
+      case 'artstation':
+        colorClass = hasUrl ? 'bg-[#13AFF0] hover:bg-[#1099D4]' : 'bg-[#2D2D2F]';
+        break;
+      case 'youtube':
+        colorClass = hasUrl ? 'bg-[#FF0000] hover:bg-[#E60000]' : 'bg-[#2D2D2F]';
+        break;
+      default:
+        colorClass = 'bg-[#2D2D2F]';
+    }
+    
+    return `${baseClass} ${colorClass} ${activeClass} ${disabledClass} ${reachedOut ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-[#111111]' : ''}`;
+  };
+
+  const currentStatus = currentPlatform ? (lead[currentPlatform.statusField] || 'Cold Message') : 'Cold Message';
+  const currentUrl = currentPlatform ? lead[currentPlatform.urlField] : null;
+  const currentReachedOut = currentPlatform ? (lead[currentPlatform.reachedOutField] || false) : false;
 
   return (
     <div 
@@ -261,68 +276,71 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
           : 'opacity-0 scale-95 translate-x-4 pointer-events-none'
       }`}
     >
-      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
+      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
         
-        {/* Top Row: Social Icons + Actions */}
-        <div className="flex items-center justify-between mb-3">
-          {/* Social Media Icons - Clickable */}
-          <div className="flex items-center gap-3" style={{ overflow: 'visible' }}>
-            {/* LinkedIn */}
-            <div className="relative group/linkedin" style={{ overflow: 'visible' }}>
-              <button
-                onClick={() => lead.linkedinUrl && handleLinkClick(lead.linkedinUrl)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                  lead.linkedinUrl 
-                    ? 'bg-[#0A66C2] hover:bg-[#004182] cursor-pointer' 
-                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
-                }`}
-                title={lead.linkedinUrl || 'No LinkedIn'}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
-                  <path d="M22.46 0H1.54C.69 0 0 .69 0 1.54v20.92C0 23.31.69 24 1.54 24h20.92c.85 0 1.54-.69 1.54-1.54V1.54C24 .69 23.31 0 22.46 0zM7.11 20.45H3.56V9h3.55v11.45zM5.34 7.43c-1.14 0-2.06-.93-2.06-2.06s.92-2.06 2.06-2.06 2.06.93 2.06 2.06-.92 2.06-2.06 2.06zM20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.36V9h3.41v1.56h.05c.47-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28z"/>
-                </svg>
-              </button>
-            </div>
-
-            {/* Instagram */}
-            <div className="relative group/insta" style={{ overflow: 'visible' }}>
-              <button
-                onClick={() => lead.instaUrl && handleLinkClick(lead.instaUrl)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                  lead.instaUrl 
-                    ? 'bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 hover:opacity-80 cursor-pointer' 
-                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
-                }`}
-                title={lead.instaUrl || 'No Instagram'}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
-                  <path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.43.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.43.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.43-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.43-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0-2.16c-3.26 0-3.67.01-4.95.07-1.28.06-2.16.27-2.93.57-.79.31-1.46.72-2.13 1.39-.67.67-1.08 1.34-1.39 2.13-.3.77-.51 1.65-.57 2.93-.06 1.28-.07 1.69-.07 4.95s.01 3.67.07 4.95c.06 1.28.27 2.16.57 2.93.31.79.72 1.46 1.39 2.13.67.67 1.34 1.08 2.13 1.39.77.3 1.65.51 2.93.57 1.28.06 1.69.07 4.95.07s3.67-.01 4.95-.07c1.28-.06 2.16-.27 2.93-.57.79-.31 1.46-.72 2.13-1.39.67-.67 1.08-1.34 1.39-2.13.3-.77.51-1.65.57-2.93.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.28-.27-2.16-.57-2.93-.31-.79-.72-1.46-1.39-2.13-.67-.67-1.34-1.08-2.13-1.39-.77-.3-1.65-.51-2.93-.57C15.67.01 15.26 0 12 0z"/>
-                  <path d="M12 5.84c-3.4 0-6.16 2.76-6.16 6.16s2.76 6.16 6.16 6.16 6.16-2.76 6.16-6.16-2.76-6.16-6.16-6.16zm0 10.15c-2.2 0-3.99-1.79-3.99-3.99s1.79-3.99 3.99-3.99 3.99 1.79 3.99 3.99-1.79 3.99-3.99 3.99z"/>
-                  <circle cx="18.41" cy="5.59" r="1.44"/>
-                </svg>
-              </button>
-            </div>
-
-            {/* X/Twitter */}
-            <div className="relative group/twitter" style={{ overflow: 'visible' }}>
-              <button
-                onClick={() => lead.xUrl && handleLinkClick(lead.xUrl)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                  lead.xUrl 
-                    ? 'bg-black hover:bg-[#1a1a1a] cursor-pointer border border-[#3D3D3F]' 
-                    : 'bg-[#2D2D2F] opacity-40 cursor-not-allowed'
-                }`}
-                title={lead.xUrl || 'No X/Twitter'}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="white">
-                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                </svg>
-              </button>
+        {/* Top Row: Social Media Icons and Actions in same line */}
+        <div className="flex items-center justify-between mb-4" style={{ overflow: 'visible' }}>
+          {/* Platform Tabs - Left side */}
+          <div className="flex-1 min-w-0" style={{ overflow: 'visible' }}>
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 pr-2 [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full" style={{ overflow: 'visible', paddingTop: '4px', paddingBottom: '4px' }}>
+            {platforms.map((platform) => {
+              const reachedOut = lead[platform.reachedOutField] || false;
+              const isActive = activeTab === platform.key;
+              const hasUrl = lead[platform.urlField];
+              
+              return (
+                <div key={platform.key} className="relative flex-shrink-0 group flex flex-col items-center" style={{ overflow: 'visible', padding: '2px' }}>
+                  <button
+                    onClick={() => {
+                      if (hasUrl) {
+                        setActiveTab(platform.key);
+                      }
+                    }}
+                    disabled={!hasUrl}
+                    className={`${getPlatformButtonClass(platform.key, isActive)} ${!hasUrl ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    title={hasUrl ? platform.name : `${platform.name} (No URL)`}
+                    style={{ overflow: 'visible' }}
+                  >
+                    {getPlatformIcon(platform.icon)}
+                  </button>
+                  {/* Active tab underline */}
+                  {isActive && hasUrl && (
+                    <div className="w-full h-0.5 bg-[#007AFF] mt-1 rounded-full" />
+                  )}
+                  {/* Toggle Reached Out Button - Small tick on top right */}
+                  {hasUrl && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleReachedOutToggle(platform.key);
+                      }}
+                      className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center transition-all z-10 shadow-lg ${
+                        reachedOut 
+                          ? 'bg-yellow-400 hover:bg-yellow-500 opacity-100' 
+                          : 'bg-[#2D2D2F] hover:bg-[#3D3D3F] opacity-80 hover:opacity-100'
+                      }`}
+                      title={reachedOut ? 'Mark as not reached out' : 'Mark as reached out'}
+                      style={{ overflow: 'visible' }}
+                    >
+                      {reachedOut ? (
+                        <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             </div>
           </div>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-2">
+          {/* Actions - Right side */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* Checkpoint Toggle */}
             <button
               onClick={() => updateLeadCheckpoint && updateLeadCheckpoint(lead.leadId, !lead.checkpoint)}
@@ -358,104 +376,159 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
           </div>
         </div>
 
-        {/* Status Row */}
-        <div className="mb-2">
-          {isEditingStatus ? (
-            <div className="bg-[#1C1C1E] rounded-md p-2">
-              <input
-                type="text"
-                value={editedStatus}
-                onChange={(e) => setEditedStatus(e.target.value)}
-                onKeyDown={handleStatusKeyPress}
-                className="w-full px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none mb-2"
-                placeholder="Enter custom status..."
-                autoFocus
-              />
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {['cold message', 'first follow up', 'meeting', 'closed'].map((status) => (
+        {/* Tab Content - Only show if platform has URL */}
+        {currentPlatform && lead[currentPlatform.urlField] && (
+            <div className="bg-[#1C1C1E] rounded-md p-3">
+              {/* URL Display */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[#8E8E93]">URL:</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleCopyUrl(currentUrl)}
+                      className={`p-1 rounded transition-colors ${
+                        copiedUrl === currentUrl 
+                          ? 'text-[#00D09C] bg-[#00D09C]/10' 
+                          : 'text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F]'
+                      }`}
+                      title={copiedUrl === currentUrl ? 'Copied!' : 'Copy URL'}
+                    >
+                      {copiedUrl === currentUrl ? (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleLinkClick(currentUrl, currentPlatform.key === 'email')}
+                      className="p-1 text-[#8E8E93] hover:text-[#FFFFFF] hover:bg-[#2D2D2F] rounded transition-colors"
+                      title="Open in browser"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                {currentUrl ? (
                   <button
-                    key={status}
-                    onClick={() => setEditedStatus(status)}
-                    className="px-2 py-0.5 text-xs bg-[#2D2D2F] text-[#8E8E93] hover:bg-[#007AFF] hover:text-white rounded-full capitalize transition-colors"
+                    onClick={() => handleLinkClick(currentUrl, currentPlatform.key === 'email')}
+                    className="text-[#007AFF] hover:text-[#0056CC] truncate cursor-pointer transition-colors text-xs text-left w-full mt-1"
+                    title="Click to open"
                   >
-                    {status}
+                    {currentUrl.replace('https://', '').replace('http://', '').replace('mailto:', '')}
                   </button>
-                ))}
+                ) : (
+                  <span className="text-xs text-[#4A4A4A] italic mt-1">No URL available</span>
+                )}
               </div>
-              <div className="flex justify-end gap-2">
-                <button onClick={handleStatusCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
-                <button onClick={handleStatusSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+
+              {/* Status Display/Edit */}
+              <div className="mt-2">
+                {isEditingStatus ? (
+                  <div className="bg-[#2D2D2F] rounded-md p-2">
+                    <input
+                      type="text"
+                      value={editedStatus}
+                      onChange={(e) => setEditedStatus(e.target.value)}
+                      onKeyDown={handleStatusKeyPress}
+                      className="w-full px-2 py-1.5 text-xs bg-[#1C1C1E] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none mb-2"
+                      placeholder="Enter custom status..."
+                      autoFocus
+                    />
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {['cold message', 'first follow up', 'second follow up', 'meeting', 'closed'].map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => setEditedStatus(status)}
+                          className="px-2 py-0.5 text-xs bg-[#1C1C1E] text-[#8E8E93] hover:bg-[#007AFF] hover:text-white rounded-full capitalize transition-colors"
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={handleStatusCancel} className="px-2 py-1 text-xs bg-[#1C1C1E] text-[#E5E5E7] hover:bg-[#2D2D2F] rounded">Cancel</button>
+                      <button onClick={handleStatusSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#8E8E93]">Status:</span>
+                    <button
+                      onClick={handleStatusEdit}
+                      className={`px-3 py-1 text-xs font-medium rounded-full capitalize cursor-pointer hover:opacity-80 ${getStatusColor(currentStatus)}`}
+                    >
+                      {currentStatus}
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#8E8E93]">Status:</span>
-              <button
-                onClick={handleStatusEdit}
-                className={`px-3 py-1 text-xs font-medium rounded-full capitalize cursor-pointer hover:opacity-80 ${getStatusColor(lead.status)}`}
-              >
-                {lead.status || 'Cold Message'}
-              </button>
             </div>
           )}
-        </div>
 
-        {/* Company Row */}
-        <div className="flex items-center h-8 bg-[#1C1C1E] rounded-md px-2 mb-2">
-          <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
-          <span className="text-xs text-[#8E8E93] ml-2 w-16">Company</span>
-          {lead.companyName ? (
-            <span className="text-xs text-[#E5E5E7] truncate">{lead.companyName}</span>
-          ) : (
-            <span className="text-xs text-[#4A4A4A] italic">No data</span>
-          )}
-        </div>
-
-        {/* Context Section */}
-        <div className="bg-[#1C1C1E] rounded-md px-2 py-2">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center">
-              <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-              </svg>
-              <span className="text-xs text-[#8E8E93] ml-2">Context</span>
-            </div>
-            {!isEditingContext && (
-              <button onClick={handleContextEdit} className="p-0.5 text-[#8E8E93] hover:text-white">
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </button>
+        {/* Company and Context - At the bottom */}
+        <div className="space-y-2 mt-4">
+          {/* Company Row */}
+          <div className="flex items-center h-8 bg-[#1C1C1E] rounded-md px-2">
+            <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span className="text-xs text-[#8E8E93] ml-2 w-16">Company</span>
+            {lead.companyName ? (
+              <span className="text-xs text-[#E5E5E7] truncate">{lead.companyName}</span>
+            ) : (
+              <span className="text-xs text-[#4A4A4A] italic">No data</span>
             )}
           </div>
-          {isEditingContext ? (
-            <div className="space-y-2">
-              <textarea
-                value={editedContext}
-                onChange={(e) => setEditedContext(e.target.value)}
-                onKeyDown={handleContextKeyPress}
-                className="w-full h-20 px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none resize-none"
-                placeholder="Add context about this lead..."
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={handleContextCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
-                <button onClick={handleContextSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+
+          {/* Context Section */}
+          <div className="bg-[#1C1C1E] rounded-md px-2 py-2">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center">
+                <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+                <span className="text-xs text-[#8E8E93] ml-2">Context</span>
               </div>
-            </div>
-          ) : (
-            <div className="text-xs min-h-[36px] cursor-pointer" onClick={handleContextEdit}>
-              {lead.context ? (
-                <span className="text-[#E5E5E7]">{lead.context}</span>
-              ) : (
-                <span className="text-[#4A4A4A] italic">No data - click to add</span>
+              {!isEditingContext && (
+                <button onClick={handleContextEdit} className="p-0.5 text-[#8E8E93] hover:text-white">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
               )}
             </div>
-          )}
+            {isEditingContext ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editedContext}
+                  onChange={(e) => setEditedContext(e.target.value)}
+                  onKeyDown={handleContextKeyPress}
+                  className="w-full h-20 px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none resize-none"
+                  placeholder="Add context about this lead..."
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={handleContextCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
+                  <button onClick={handleContextSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs min-h-[36px] cursor-pointer" onClick={handleContextEdit}>
+                {lead.context ? (
+                  <span className="text-[#E5E5E7]">{lead.context}</span>
+                ) : (
+                  <span className="text-[#4A4A4A] italic">No data - click to add</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-
       </div>
       
       {/* Delete Confirmation Modal */}

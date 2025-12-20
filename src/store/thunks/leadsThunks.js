@@ -8,6 +8,8 @@ import {
   addLead as addLeadAction,
   updateLeadStatus as updateLeadStatusAction,
   updateLeadContext as updateLeadContextAction,
+  updateLeadPlatformStatus as updateLeadPlatformStatusAction,
+  updateLeadPlatformReachedOut as updateLeadPlatformReachedOutAction,
   updateLeadCheckpoint as updateLeadCheckpointAction,
   deleteLead as deleteLeadAction,
   moveLeadToBucket as moveLeadToBucketAction
@@ -138,6 +140,60 @@ export const updateLeadContext = createAsyncThunk(
       }
     } catch (error) {
       const errorMessage = error.message || 'Failed to update lead context';
+      dispatch(setError(errorMessage, 'personal', true));
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+/**
+ * Update lead platform status via API and update Redux state
+ * @param {Object} params - { leadId: string, platform: string, status: string }
+ */
+export const updateLeadPlatformStatus = createAsyncThunk(
+  'leads/updateLeadPlatformStatus',
+  async ({ leadId, platform, status }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await leadflowService.updateLeadPlatformStatus(leadId, platform, status);
+      
+      if (response.status_code === 200) {
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadPlatformStatusAction({ leadId, platform, status }, 'personal', true));
+        return { leadId, platform, status };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to update lead platform status';
+        dispatch(setError(errorMessage, 'personal', true));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to update lead platform status';
+      dispatch(setError(errorMessage, 'personal', true));
+      return rejectWithValue(errorMessage);
+    }
+  }
+);
+
+/**
+ * Update lead platform reached out status via API and update Redux state
+ * @param {Object} params - { leadId: string, platform: string, reachedOut: boolean }
+ */
+export const updateLeadPlatformReachedOut = createAsyncThunk(
+  'leads/updateLeadPlatformReachedOut',
+  async ({ leadId, platform, reachedOut }, { dispatch, rejectWithValue }) => {
+    try {
+      const response = await leadflowService.updateLeadPlatformReachedOut(leadId, platform, reachedOut);
+      
+      if (response.status_code === 200) {
+        // Store in personal context - Broadcast to all windows (broadcast=true)
+        dispatch(updateLeadPlatformReachedOutAction({ leadId, platform, reachedOut }, 'personal', true));
+        return { leadId, platform, reachedOut };
+      } else {
+        const errorMessage = response.content?.detail || 'Failed to update lead platform reached out status';
+        dispatch(setError(errorMessage, 'personal', true));
+        return rejectWithValue(errorMessage);
+      }
+    } catch (error) {
+      const errorMessage = error.message || 'Failed to update lead platform reached out status';
       dispatch(setError(errorMessage, 'personal', true));
       return rejectWithValue(errorMessage);
     }

@@ -264,6 +264,64 @@ const leadsSlice = createSlice({
       })
     },
     
+    // Update lead platform status
+    // context: 'personal' or teamId string
+    updateLeadPlatformStatus: {
+      reducer: (state, action) => {
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          return;
+        }
+        
+        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
+        if (!Array.isArray(leads)) {
+          return;
+        }
+        
+        const { leadId, platform, status } = data;
+        const platformStatusField = `${platform}Status`;
+        const lead = leads.find(l => 
+          l.leadId === leadId || l.id === leadId
+        );
+        if (lead) {
+          lead[platformStatusField] = status;
+        }
+      },
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
+      })
+    },
+    
+    // Update lead platform reached out status
+    // context: 'personal' or teamId string
+    updateLeadPlatformReachedOut: {
+      reducer: (state, action) => {
+        const { data, context, broadcast } = action.payload;
+        
+        if (context !== 'personal' && !state.teams[context]) {
+          return;
+        }
+        
+        const leads = context === 'personal' ? state.personal.leads : state.teams[context].leads;
+        if (!Array.isArray(leads)) {
+          return;
+        }
+        
+        const { leadId, platform, reachedOut } = data;
+        const platformReachedOutField = `${platform}ReachedOut`;
+        const lead = leads.find(l => 
+          l.leadId === leadId || l.id === leadId
+        );
+        if (lead) {
+          lead[platformReachedOutField] = reachedOut;
+        }
+      },
+      prepare: (data, context = 'personal', broadcast = false) => ({
+        payload: { data, context, broadcast }
+      })
+    },
+    
     // Update entire lead object
     // context: 'personal' or teamId string
     updateLead: {
@@ -460,6 +518,8 @@ export const {
   addLead,
   updateLeadStatus,
   updateLeadContext,
+  updateLeadPlatformStatus,
+  updateLeadPlatformReachedOut,
   updateLeadCheckpoint,
   updateLead,
   deleteLead,
