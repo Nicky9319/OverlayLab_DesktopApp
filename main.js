@@ -21,6 +21,10 @@ const {url} = require('inspector');
 // Import our custom logger
 const logger = require('./logger');
 
+// Image Queue Management - Temp folder and worker
+const crypto = require('crypto');
+const https = require('https');
+
 // DB functions removed for now
 
 import dotenv from 'dotenv';
@@ -1035,10 +1039,10 @@ async function createMainAndWidgetWindows() {
 // Note: screen is already imported at the top, only need nativeImage and desktopCapturer
 const { nativeImage, desktopCapturer } = require('electron');
 
-// Global shortcut screenshot function with cooldown
+// Global shortcut screenshot function with cooldown (non-blocking)
 async function handleGlobalScreenshot() {
   const now = Date.now();
-  const cooldownTime = 1000; // 1 second cooldown
+  const cooldownTime = 200; // 200ms cooldown for faster capture
   
   if (now - lastScreenshotTime < cooldownTime) {
     console.log('Screenshot on cooldown, ignoring request');
@@ -1051,119 +1055,116 @@ async function handleGlobalScreenshot() {
   screenshotProcessActive = true;
   console.log('Screenshot process started - marking as active');
   
-  try {
-    // Send processing notification to widget window if it exists
-    if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
-      try {
-        console.log('Sending screenshot-processing event to widget window');
-        widgetWindow.window.webContents.send('eventFromMain', {
-          eventName: 'screenshot-processing',
-          payload: { status: 'processing', timestamp: now }
-        });
-        console.log('Screenshot-processing event sent successfully');
-      } catch (sendError) {
-        console.warn('Failed to send processing notification to widget:', sendError);
+  // Process screenshot asynchronously to avoid blocking mouse
+  // Use setImmediate to yield to event loop immediately
+  setImmediate(async () => {
+    try {
+      // Send processing notification to widget window if it exists (non-blocking)
+      if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+        try {
+          console.log('Sending screenshot-processing event to widget window');
+          widgetWindow.window.webContents.send('eventFromMain', {
+            eventName: 'screenshot-processing',
+            payload: { status: 'processing', timestamp: now }
+          });
+          console.log('Screenshot-processing event sent successfully');
+        } catch (sendError) {
+          console.warn('Failed to send processing notification to widget:', sendError);
+        }
       }
-    } else {
-      console.warn('Widget window not available for processing notification:', {
-        exists: !!widgetWindow,
-        hasWindow: widgetWindow ? !!widgetWindow.window : 'N/A',
-        windowDestroyed: widgetWindow && widgetWindow.window ? widgetWindow.window.isDestroyed() : 'N/A',
-        hasWebContents: widgetWindow && widgetWindow.window ? !!widgetWindow.window.webContents : 'N/A'
-      });
-    }
+      
+      const result = await captureScreenshot();
     
-    const result = await captureScreenshot();
-    
-    // Send success notification with image data to widget window if it exists
-    if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
-      try {
-        const hasImageData = !!result.imageData;
-        const imageSize = result.imageData ? result.imageData.length : 0;
-        
-        console.log(`[Screenshot] Sending screenshot-taken event to widget - Has image data: ${hasImageData}, Size: ${result.base64SizeKB} KB`);
-        logger.info('Sending screenshot to overlay window', { 
-          hasImageData, 
-          imageSizeKB: result.base64SizeKB
-        });
-        
-        widgetWindow.window.webContents.send('eventFromMain', {
-          eventName: 'screenshot-taken',
-          payload: { 
-            success: true, 
-            timestamp: now,
-            imageData: result.imageData,
-            resolution: result.resolution,
-            imageSizeKB: result.imageSizeKB
-          }
-        });
-        console.log('[Screenshot] screenshot-taken event sent successfully');
-        
-        // Send detailed image processing event
-        console.log('[Screenshot] Sending screenshot-image-captured event for detailed processing');
-        logger.debug('Sending detailed screenshot event', {
-          hasImageData,
-          resolution: result.resolution
-        });
-        
-        widgetWindow.window.webContents.send('eventFromMain', {
-          eventName: 'screenshot-image-captured',
-          payload: {
-            imageBlob: {
-              size: result.imageData ? result.imageData.length : 0,
-              type: 'image/png',
+      // Send success notification with image data to widget window if it exists
+      if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+        try {
+          const hasImageData = !!result.imageData;
+          const imageSize = result.imageData ? result.imageData.length : 0;
+          
+          console.log(`[Screenshot] Sending screenshot-taken event to widget - Has image data: ${hasImageData}, Size: ${result.base64SizeKB} KB`);
+          logger.info('Sending screenshot to overlay window', { 
+            hasImageData, 
+            imageSizeKB: result.base64SizeKB
+          });
+          
+          widgetWindow.window.webContents.send('eventFromMain', {
+            eventName: 'screenshot-taken',
+            payload: { 
+              success: true, 
               timestamp: now,
-              base64Length: result.imageData ? result.imageData.replace('data:image/png;base64,', '').length : 0
-            },
-            imageDataUrl: result.imageData,
-            resolution: result.resolution,
-            captureMethod: 'global-shortcut',
-            imageSizeKB: result.imageSizeKB,
-            base64SizeKB: result.base64SizeKB
-          }
-        });
-        console.log('[Screenshot] screenshot-image-captured event sent successfully');
-        logger.info('Screenshot events sent to overlay successfully');
-      } catch (sendError) {
-        console.error('[Screenshot] ❌ Failed to send screenshot to widget:', sendError);
-        logger.error('Failed to send screenshot to overlay', { 
-          error: sendError.message, 
-          stack: sendError.stack,
-          imageSizeKB: result.base64SizeKB
+              imageData: result.imageData,
+              resolution: result.resolution,
+              imageSizeKB: result.imageSizeKB
+            }
+          });
+          console.log('[Screenshot] screenshot-taken event sent successfully');
+          
+          // Send detailed image processing event
+          console.log('[Screenshot] Sending screenshot-image-captured event for detailed processing');
+          logger.debug('Sending detailed screenshot event', {
+            hasImageData,
+            resolution: result.resolution
+          });
+          
+          widgetWindow.window.webContents.send('eventFromMain', {
+            eventName: 'screenshot-image-captured',
+            payload: {
+              imageBlob: {
+                size: result.imageData ? result.imageData.length : 0,
+                type: 'image/png',
+                timestamp: now,
+                base64Length: result.imageData ? result.imageData.replace('data:image/png;base64,', '').length : 0
+              },
+              imageDataUrl: result.imageData,
+              resolution: result.resolution,
+              captureMethod: 'global-shortcut',
+              imageSizeKB: result.imageSizeKB,
+              base64SizeKB: result.base64SizeKB
+            }
+          });
+          console.log('[Screenshot] screenshot-image-captured event sent successfully');
+          logger.info('Screenshot events sent to overlay successfully');
+        } catch (sendError) {
+          console.error('[Screenshot] ❌ Failed to send screenshot to widget:', sendError);
+          logger.error('Failed to send screenshot to overlay', { 
+            error: sendError.message, 
+            stack: sendError.stack,
+            imageSizeKB: result.base64SizeKB
+          });
+        }
+      } else {
+        console.warn('Widget window not available for success notification:', {
+          exists: !!widgetWindow,
+          hasWindow: widgetWindow ? !!widgetWindow.window : 'N/A',
+          windowDestroyed: widgetWindow && widgetWindow.window ? widgetWindow.window.isDestroyed() : 'N/A',
+          hasWebContents: widgetWindow && widgetWindow.window ? !!widgetWindow.window.webContents : 'N/A'
         });
       }
-    } else {
-      console.warn('Widget window not available for success notification:', {
-        exists: !!widgetWindow,
-        hasWindow: widgetWindow ? !!widgetWindow.window : 'N/A',
-        windowDestroyed: widgetWindow && widgetWindow.window ? widgetWindow.window.isDestroyed() : 'N/A',
-        hasWebContents: widgetWindow && widgetWindow.window ? !!widgetWindow.window.webContents : 'N/A'
-      });
-    }
-    
-    console.log('Global shortcut screenshot captured successfully:', result);
-    return result;
-  } catch (error) {
-    console.error('Global shortcut screenshot failed:', error);
-    
-    // Send error notification to widget window if it exists
-    if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
-      try {
-        widgetWindow.window.webContents.send('eventFromMain', {
-          eventName: 'screenshot-error',
-          payload: { success: false, error: error.message }
-        });
-      } catch (sendError) {
-        console.warn('Failed to send error notification to widget:', sendError);
+      
+      console.log('Global shortcut screenshot captured successfully:', result);
+    } catch (error) {
+      console.error('Global shortcut screenshot failed:', error);
+      
+      // Send error notification to widget window if it exists
+      if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+        try {
+          widgetWindow.window.webContents.send('eventFromMain', {
+            eventName: 'screenshot-error',
+            payload: { success: false, error: error.message }
+          });
+        } catch (sendError) {
+          console.warn('Failed to send error notification to widget:', sendError);
+        }
       }
+    } finally {
+      // Mark screenshot process as inactive
+      screenshotProcessActive = false;
+      console.log('Screenshot process completed - marking as inactive');
     }
-    
-    return null;
-  } finally {
-    // Mark screenshot process as inactive
-    screenshotProcessActive = false;
-    console.log('Screenshot process completed - marking as inactive');
-  }
+  });
+  
+  // Return immediately (non-blocking)
+  return;
 }
 
 // Check and request screenshot permissions (macOS only)
@@ -3778,6 +3779,580 @@ async function handleWebEventTrigger(url) {
 
 // App Section !!! -------------------------------------------------------------------------------------
 
+// ============================================================================
+// Image Queue Management System
+// ============================================================================
+
+// Get temp directory path
+const getTempDir = () => {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'temp');
+};
+
+// Initialize temp directory
+const initTempDir = () => {
+  const tempDir = getTempDir();
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    logger.info('Created temp directory for image queue', { path: tempDir });
+  }
+  return tempDir;
+};
+
+// Generate unique session ID
+const generateSessionId = () => {
+  return `${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+};
+
+// Queue state tracking
+let queueState = {
+  pending: 0,
+  processing: 0,
+  completed: 0,
+  failed: 0
+};
+
+let workerInterval = null;
+let isWorkerRunning = false;
+// Track sessions currently being processed to prevent duplicates
+const processingSessions = new Set();
+
+// Get queue status
+const getQueueStatus = () => {
+  const tempDir = getTempDir();
+  if (!fs.existsSync(tempDir)) {
+    return { ...queueState, pending: 0, processing: 0 };
+  }
+
+  const folders = fs.readdirSync(tempDir, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => dirent.name);
+
+  let pending = 0;
+  let processing = 0;
+  let completed = 0;
+  let failed = 0;
+
+  folders.forEach(folderName => {
+    const metadataPath = path.join(tempDir, folderName, 'metadata.json');
+    if (fs.existsSync(metadataPath)) {
+      try {
+        const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        if (metadata.status === 'pending') pending++;
+        else if (metadata.status === 'processing') processing++;
+        else if (metadata.status === 'completed') completed++;
+        else if (metadata.status === 'failed') failed++;
+      } catch (e) {
+        logger.error('Error reading metadata', { folder: folderName, error: e.message });
+      }
+    }
+  });
+
+  queueState = { pending, processing, completed, failed };
+  return queueState;
+};
+
+// Broadcast queue status update to all windows
+const broadcastQueueStatus = () => {
+  const status = getQueueStatus();
+  const allWindows = BrowserWindow.getAllWindows();
+  allWindows.forEach(window => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('image-queue:status-update', status);
+    }
+  });
+};
+
+// Save image to temp folder
+// If sessionId is provided in metadata, use it; otherwise generate new one
+const saveImageToQueue = async (imageBuffer, bucketId, metadata = {}) => {
+  try {
+    const tempDir = initTempDir();
+    // Use provided sessionId or generate new one
+    const sessionId = metadata.sessionId || generateSessionId();
+    const sessionDir = path.join(tempDir, sessionId);
+    
+    // Create session directory
+    fs.mkdirSync(sessionDir, { recursive: true });
+    
+    // For multiple images in same session, append image index or timestamp to filename
+    const imageFilename = metadata.imageIndex !== undefined 
+      ? `image_${metadata.imageIndex}` 
+      : metadata.imageCount !== undefined && metadata.imageCount > 1
+        ? `image_${Date.now()}`
+        : 'image';
+    
+    // Save image file
+    const imagePath = path.join(sessionDir, imageFilename);
+    fs.writeFileSync(imagePath, imageBuffer);
+    
+    // Save metadata
+    const metadataObj = {
+      sessionId,
+      bucketId,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      imageFilename,
+      ...metadata
+    };
+    const metadataPath = path.join(sessionDir, 'metadata.json');
+    
+    // If metadata.json already exists (multiple images in same session), append to it
+    if (fs.existsSync(metadataPath)) {
+      const existingMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+      // Update with latest info but preserve image list if it exists
+      const updatedMetadata = {
+        ...existingMetadata,
+        ...metadataObj,
+        lastImageAddedAt: new Date().toISOString(),
+        imageCount: (existingMetadata.imageCount || 0) + 1
+      };
+      fs.writeFileSync(metadataPath, JSON.stringify(updatedMetadata, null, 2));
+    } else {
+      metadataObj.imageCount = 1;
+      fs.writeFileSync(metadataPath, JSON.stringify(metadataObj, null, 2));
+    }
+    
+    logger.info('Image saved to queue', { sessionId, bucketId, imageFilename });
+    
+    // Broadcast status update
+    broadcastQueueStatus();
+    
+    return { success: true, sessionId };
+  } catch (error) {
+    logger.error('Error saving image to queue', { error: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
+// Store token from renderer for queue processing
+let queueAuthToken = null;
+
+// IPC handler to receive token from renderer
+ipcMain.handle('image-queue:set-token', async (event, token) => {
+  if (token) {
+    queueAuthToken = token;
+    logger.info('Queue auth token updated from renderer');
+    return { success: true };
+  }
+  return { success: false, error: 'No token provided' };
+});
+
+// Get Clerk token from renderer or stored token
+const getClerkToken = async () => {
+  // Try queue token first (most recent from renderer)
+  if (queueAuthToken) {
+    return queueAuthToken;
+  }
+  // Fallback to stored authToken
+  if (authToken) {
+    return authToken;
+  }
+  // If no token available, return null - worker will skip this item
+  logger.warn('No auth token available for queue processing');
+  return null;
+};
+
+// Get backend URL
+const getBackendUrl = () => {
+  // Use environment variable or default
+  const baseUrl = process.env.LEADFLOW_API_URL || 'https://leadflow.api.overlaylab.studio';
+  return baseUrl;
+};
+
+// Process a single queue item
+const processQueueItem = async (sessionDir, sessionId) => {
+  const metadataPath = path.join(sessionDir, 'metadata.json');
+  
+  if (!fs.existsSync(metadataPath)) {
+    logger.warn('Queue item missing metadata', { sessionId });
+    return false;
+  }
+  
+  // Check if any image files exist (support multiple images per session)
+  const imageFiles = fs.existsSync(sessionDir) 
+    ? fs.readdirSync(sessionDir).filter(f => f.startsWith('image') && !f.endsWith('.json'))
+    : [];
+  
+  if (imageFiles.length === 0) {
+    logger.warn('Queue item missing image files', { sessionId });
+    return false;
+  }
+
+  let metadata;
+  try {
+    metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+  } catch (e) {
+    logger.error('Error reading metadata', { sessionId, error: e.message });
+    return false;
+  }
+
+  // Skip if not pending
+  if (metadata.status !== 'pending') {
+    return false;
+  }
+
+  // Skip if already being processed
+  if (processingSessions.has(sessionId)) {
+    logger.debug('Session already being processed, skipping', { sessionId });
+    return false;
+  }
+
+  // Mark as processing
+  processingSessions.add(sessionId);
+
+  const token = await getClerkToken();
+  if (!token) {
+    logger.warn('No auth token available, skipping queue item', { sessionId });
+    return false;
+  }
+
+  try {
+    // Update status to processing
+    metadata.status = 'processing';
+    metadata.processingStartedAt = new Date().toISOString();
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    broadcastQueueStatus();
+
+    const backendUrl = getBackendUrl();
+    
+    // Handle multiple images in session - get all image files
+    const imageFiles = fs.readdirSync(sessionDir)
+      .filter(f => f.startsWith('image') && !f.endsWith('.json'))
+      .map(f => path.join(sessionDir, f));
+    
+    if (imageFiles.length === 0) {
+      throw new Error('No image files found in session');
+    }
+    
+    // Upload all images to backend with same session_id
+    logger.info('Uploading images to backend', { sessionId, imageCount: imageFiles.length });
+    
+    const uploadedSessionIds = [];
+    for (const imageFilePath of imageFiles) {
+      const imageBuffer = fs.readFileSync(imageFilePath);
+      
+      // Create multipart/form-data manually
+      const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`;
+      const parts = [];
+      
+      // Add session_id as form field
+      parts.push(Buffer.from(`--${boundary}\r\n`, 'utf8'));
+      parts.push(Buffer.from('Content-Disposition: form-data; name="session_id"\r\n', 'utf8'));
+      parts.push(Buffer.from('\r\n', 'utf8'));
+      parts.push(Buffer.from(sessionId, 'utf8'));
+      parts.push(Buffer.from('\r\n', 'utf8'));
+      
+      // Add image file
+      parts.push(Buffer.from(`--${boundary}\r\n`, 'utf8'));
+      parts.push(Buffer.from('Content-Disposition: form-data; name="file"; filename="image.png"\r\n', 'utf8'));
+      parts.push(Buffer.from('Content-Type: image/png\r\n', 'utf8'));
+      parts.push(Buffer.from('\r\n', 'utf8'));
+      
+      // Add image buffer
+      parts.push(imageBuffer);
+      
+      // Add closing boundary
+      parts.push(Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'));
+      
+      const formDataBuffer = Buffer.concat(parts);
+
+      const addImageResponse = await new Promise((resolve, reject) => {
+        const urlObj = new URL(`${backendUrl}/api/leadflow-service/collective-sessions/add-image`);
+        const isHttps = urlObj.protocol === 'https:';
+        const httpModule = isHttps ? https : http;
+        
+        const options = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || (isHttps ? 443 : 80),
+          path: urlObj.pathname + urlObj.search,
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': formDataBuffer.length
+          }
+        };
+
+        const req = httpModule.request(options, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try {
+              const result = {
+                status: res.statusCode,
+                data: JSON.parse(data)
+              };
+              resolve(result);
+            } catch (e) {
+              resolve({ status: res.statusCode, data: { detail: data } });
+            }
+          });
+        });
+
+        req.on('error', reject);
+        req.write(formDataBuffer);
+        req.end();
+      });
+
+      if (addImageResponse.status !== 200) {
+        throw new Error(`Failed to add image: ${addImageResponse.data?.detail || 'Unknown error'}`);
+      }
+
+      const backendSessionId = addImageResponse.data?.session_id || sessionId;
+      uploadedSessionIds.push(backendSessionId);
+      logger.info('Image added to backend session', { sessionId, backendSessionId, imageFile: path.basename(imageFilePath) });
+    }
+    
+    // Use the first backend session ID (should be same for all if session_id was passed)
+    const sessionIdFromBackend = uploadedSessionIds[0] || sessionId;
+    logger.info('All images uploaded to backend', { sessionId, backendSessionId: sessionIdFromBackend, imageCount: imageFiles.length });
+
+    // Step 2: Process the session
+    logger.info('Processing session on backend', { sessionId, bucketId: metadata.bucketId });
+    const processResponse = await new Promise((resolve, reject) => {
+      const urlObj = new URL(`${backendUrl}/api/leadflow-service/collective-sessions/process`);
+      const isHttps = urlObj.protocol === 'https:';
+      const httpModule = isHttps ? https : http;
+      
+      const body = JSON.stringify({ 
+        bucket_id: metadata.bucketId,
+        session_id: sessionIdFromBackend 
+      });
+
+      const options = {
+        hostname: urlObj.hostname,
+        port: urlObj.port || (isHttps ? 443 : 80),
+        path: urlObj.pathname + urlObj.search,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      };
+
+      const req = httpModule.request(options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const result = {
+              status: res.statusCode,
+              data: JSON.parse(data)
+            };
+            resolve(result);
+          } catch (e) {
+            resolve({ status: res.statusCode, data: { detail: data } });
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    if (processResponse.status === 202 || processResponse.status === 200) {
+      // Success - processing started or completed
+      metadata.status = 'completed';
+      metadata.completedAt = new Date().toISOString();
+      metadata.backendResponse = processResponse.data;
+      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+      
+      logger.info('Session processing initiated/completed', { sessionId });
+      
+      // Clean up after delay (5 seconds for user feedback)
+      setTimeout(() => {
+        try {
+          fs.rmSync(sessionDir, { recursive: true, force: true });
+          logger.info('Cleaned up completed queue item', { sessionId });
+          broadcastQueueStatus();
+        } catch (e) {
+          logger.error('Error cleaning up queue item', { sessionId, error: e.message });
+        }
+      }, 5000);
+      
+      broadcastQueueStatus();
+      // Remove from processing set
+      processingSessions.delete(sessionId);
+      return true;
+    } else {
+      throw new Error(`Processing failed: ${processResponse.data?.detail || 'Unknown error'}`);
+    }
+
+  } catch (error) {
+    logger.error('Error processing queue item', { sessionId, error: error.message });
+    
+    // Remove from processing set
+    processingSessions.delete(sessionId);
+    
+    // Update status to failed
+    try {
+      metadata.status = 'failed';
+      metadata.failedAt = new Date().toISOString();
+      metadata.error = error.message;
+      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+      broadcastQueueStatus();
+      
+      // Clean up failed items after longer delay (30 seconds)
+      setTimeout(() => {
+        try {
+          fs.rmSync(sessionDir, { recursive: true, force: true });
+          logger.info('Cleaned up failed queue item', { sessionId });
+          broadcastQueueStatus();
+        } catch (e) {
+          logger.error('Error cleaning up failed queue item', { sessionId, error: e.message });
+        }
+      }, 30000);
+    } catch (e) {
+      logger.error('Error updating failed status', { sessionId, error: e.message });
+    }
+    
+    return false;
+  }
+};
+
+// Worker function that processes queue
+const processImageQueue = async () => {
+  if (isWorkerRunning) {
+    return; // Skip if already running
+  }
+
+  isWorkerRunning = true;
+  try {
+    const tempDir = getTempDir();
+    if (!fs.existsSync(tempDir)) {
+      return;
+    }
+
+    const folders = fs.readdirSync(tempDir, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name);
+
+    // Process pending items (limit to 3 concurrent to avoid overwhelming backend)
+    const pendingItems = [];
+    for (const folderName of folders) {
+      const sessionDir = path.join(tempDir, folderName);
+      const metadataPath = path.join(sessionDir, 'metadata.json');
+      
+      if (fs.existsSync(metadataPath)) {
+        try {
+          const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+          if (metadata.status === 'pending') {
+            pendingItems.push({ sessionDir, sessionId: folderName });
+          }
+        } catch (e) {
+          logger.error('Error reading metadata in worker', { folder: folderName, error: e.message });
+        }
+      }
+    }
+
+    // Process up to 3 items concurrently
+    const concurrentLimit = 3;
+    const itemsToProcess = pendingItems.slice(0, concurrentLimit);
+    
+    if (itemsToProcess.length > 0) {
+      logger.info('Processing queue items', { count: itemsToProcess.length });
+      await Promise.allSettled(
+        itemsToProcess.map(item => processQueueItem(item.sessionDir, item.sessionId))
+      );
+    }
+
+    // Update status
+    broadcastQueueStatus();
+  } catch (error) {
+    logger.error('Error in queue worker', { error: error.message });
+  } finally {
+    isWorkerRunning = false;
+  }
+};
+
+// Start worker
+const startImageQueueWorker = () => {
+  if (workerInterval) {
+    return; // Already running
+  }
+  
+  initTempDir();
+  logger.info('Starting image queue worker');
+  
+  // Process immediately, then every 2 seconds
+  processImageQueue();
+  workerInterval = setInterval(() => {
+    processImageQueue();
+  }, 2000);
+};
+
+// Stop worker
+const stopImageQueueWorker = () => {
+  if (workerInterval) {
+    clearInterval(workerInterval);
+    workerInterval = null;
+    logger.info('Stopped image queue worker');
+  }
+};
+
+// IPC Handlers for image queue
+ipcMain.handle('image-queue:save-image', async (event, imageBuffer, bucketId, metadata = {}) => {
+  try {
+    // Convert ArrayBuffer or Buffer to Buffer if needed
+    let buffer;
+    if (Buffer.isBuffer(imageBuffer)) {
+      buffer = imageBuffer;
+    } else if (imageBuffer instanceof ArrayBuffer) {
+      buffer = Buffer.from(imageBuffer);
+    } else if (imageBuffer instanceof Uint8Array) {
+      buffer = Buffer.from(imageBuffer);
+    } else {
+      throw new Error('Invalid image buffer type');
+    }
+
+    const result = await saveImageToQueue(buffer, bucketId, metadata);
+    return result;
+  } catch (error) {
+    logger.error('Error in save-image IPC handler', { error: error.message });
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC handler for saving image from base64 string (faster, non-blocking for UI)
+ipcMain.handle('image-queue:save-image-from-base64', async (event, base64DataUrl, bucketId, metadata = {}) => {
+  try {
+    // Extract base64 data from data URL
+    const base64Data = base64DataUrl.includes(',') 
+      ? base64DataUrl.split(',')[1] 
+      : base64DataUrl;
+    
+    if (!base64Data) {
+      throw new Error('No base64 data found');
+    }
+    
+    // Convert base64 to buffer in main process (non-blocking for UI)
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    if (buffer.length === 0) {
+      throw new Error('Decoded image buffer is empty');
+    }
+    
+    logger.info('Converted base64 to buffer', { size: buffer.length });
+    
+    const result = await saveImageToQueue(buffer, bucketId, metadata);
+    return result;
+  } catch (error) {
+    logger.error('Error in save-image-from-base64 IPC handler', { error: error.message });
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('image-queue:get-status', async () => {
+  return getQueueStatus();
+});
+
+// ============================================================================
+// Image Queue Management System END
+// ============================================================================
+
 app.on('second-instance', (event, argv) => {
   const urlArg = argv.find(arg => arg.startsWith('overlaylab://'));
   if (urlArg) {
@@ -4004,6 +4579,8 @@ app.whenReady().then(async () => {
       if (authResult && authResult.success) {
         logger.info('Authentication successful, creating main and widget windows');
         createMainAndWidgetWindows();
+        // Start image queue worker after windows are created
+        startImageQueueWorker();
       } else {
         logger.error('Authentication failed or was cancelled');
         app.quit();
@@ -4058,6 +4635,9 @@ app.on('will-quit' , async (event) => {
   if (!app.isQuiting && !isRestartingAuth) {
     event.preventDefault();
     logger.info("Application quitting, cleaning up resources");
+
+    // Stop image queue worker
+    stopImageQueueWorker();
 
     // Set quitting flag
     app.isQuiting = true;

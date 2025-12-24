@@ -20,7 +20,44 @@ const FloatingWidget = () => {
   const [hasDragged, setHasDragged] = useState(false);
   const [screenshotAnimation, setScreenshotAnimation] = useState('idle'); // 'idle', 'processing', 'success'
   const [leadProcessingStatus, setLeadProcessingStatus] = useState('idle'); // 'idle', 'processing', 'success', 'error'
+  const [collectedImagesCount, setCollectedImagesCount] = useState(0);
   const dispatch = useDispatch();
+  
+  // Get collected images count from localStorage when collapsed
+  useEffect(() => {
+    const updateCollectedImagesCount = () => {
+      try {
+        const saved = localStorage.getItem('actionBar_collectedImages');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setCollectedImagesCount(Array.isArray(parsed) ? parsed.length : 0);
+        } else {
+          setCollectedImagesCount(0);
+        }
+      } catch (error) {
+        setCollectedImagesCount(0);
+      }
+    };
+    
+    updateCollectedImagesCount();
+    
+    // Listen for storage changes (when ActionBar updates collectedImages)
+    const handleStorageChange = (e) => {
+      if (e.key === 'actionBar_collectedImages') {
+        updateCollectedImagesCount();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also poll periodically to catch changes from same window
+    const interval = setInterval(updateCollectedImagesCount, 500);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [actionBarCollapsed]);
 
 
   // Debug: Log when component mounts
@@ -545,6 +582,41 @@ const FloatingWidget = () => {
                   )}
                 </svg>
               </button>
+              
+              {/* Badge showing number of collected images when collapsed */}
+              {actionBarCollapsed && collectedImagesCount > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-2px',
+                    right: '-2px',
+                    minWidth: '18px',
+                    height: '18px',
+                    borderRadius: '9px',
+                    background: themeColors.primaryBlue,
+                    border: `2px solid ${themeColors.primaryBackground}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 4px',
+                    zIndex: 11,
+                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <span
+                    style={{
+                      color: '#FFFFFF',
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      lineHeight: '1',
+                      textAlign: 'center'
+                    }}
+                  >
+                    {collectedImagesCount > 99 ? '99+' : collectedImagesCount}
+                  </span>
+                </div>
+              )}
             </div>
           </HoverComponent>
         </div>
