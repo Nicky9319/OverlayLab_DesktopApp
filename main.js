@@ -4559,6 +4559,76 @@ app.whenReady().then(async () => {
     globalShortcut.register('CommandOrControl+1', screenshotRecordingHandler);
   }
 
+  // Processing shortcut (Ctrl + 2 on Windows, Option + 2 on macOS)
+  const processingHandler = () => {
+    logger.debug('Ctrl+2/Option+2 shortcut pressed - triggering processing');
+    
+    // Check current overlay type from store
+    let currentOverlayType = 'leadflow'; // default
+    if (store) {
+      currentOverlayType = store.get('selectedOverlayType', 'leadflow');
+    }
+    
+    // Only handle for leadflow overlay
+    if (currentOverlayType !== 'leadflow') {
+      return;
+    }
+    
+    // Send processing request to widget window
+    if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+      try {
+        widgetWindow.window.webContents.send('eventFromMain', {
+          eventName: 'process-request',
+          payload: { source: 'global-shortcut', timestamp: Date.now() }
+        });
+        logger.debug('Processing request sent to widget window');
+      } catch (sendError) {
+        logger.warn('Failed to send processing request to widget:', sendError);
+      }
+    } else {
+      logger.warn('Widget window not available for processing request');
+    }
+  };
+
+  // Mode toggle shortcut (Ctrl + 3 on Windows, Option + 3 on macOS)
+  const modeToggleHandler = () => {
+    logger.debug('Ctrl+3/Option+3 shortcut pressed - toggling capture mode');
+    
+    // Check current overlay type from store
+    let currentOverlayType = 'leadflow'; // default
+    if (store) {
+      currentOverlayType = store.get('selectedOverlayType', 'leadflow');
+    }
+    
+    // Only handle for leadflow overlay
+    if (currentOverlayType !== 'leadflow') {
+      return;
+    }
+    
+    // Send mode toggle request to widget window
+    if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {
+      try {
+        widgetWindow.window.webContents.send('eventFromMain', {
+          eventName: 'toggle-capture-mode',
+          payload: { source: 'global-shortcut', timestamp: Date.now() }
+        });
+        logger.debug('Mode toggle request sent to widget window');
+      } catch (sendError) {
+        logger.warn('Failed to send mode toggle request to widget:', sendError);
+      }
+    } else {
+      logger.warn('Widget window not available for mode toggle request');
+    }
+  };
+
+  if (isMac) {
+    globalShortcut.register('Alt+2', processingHandler);
+    globalShortcut.register('Alt+3', modeToggleHandler);
+  } else {
+    globalShortcut.register('CommandOrControl+2', processingHandler);
+    globalShortcut.register('CommandOrControl+3', modeToggleHandler);
+  }
+
   // Initialize DB - removed for now
 
   // Load Store

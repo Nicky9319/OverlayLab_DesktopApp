@@ -21,6 +21,7 @@ const FloatingWidget = () => {
   const [screenshotAnimation, setScreenshotAnimation] = useState('idle'); // 'idle', 'processing', 'success'
   const [leadProcessingStatus, setLeadProcessingStatus] = useState('idle'); // 'idle', 'processing', 'success', 'error'
   const [collectedImagesCount, setCollectedImagesCount] = useState(0);
+  const [captureMode, setCaptureMode] = useState('single'); // 'single' or 'multiple'
   const dispatch = useDispatch();
   
   // Get collected images count from localStorage when collapsed
@@ -58,6 +59,37 @@ const FloatingWidget = () => {
       clearInterval(interval);
     };
   }, [actionBarCollapsed]);
+
+  // Get capture mode from localStorage
+  useEffect(() => {
+    const updateCaptureMode = () => {
+      try {
+        const saved = localStorage.getItem('actionBar_captureMode');
+        setCaptureMode(saved === 'multiple' ? 'multiple' : 'single');
+      } catch (error) {
+        setCaptureMode('single');
+      }
+    };
+    
+    updateCaptureMode();
+    
+    // Listen for storage changes (when ActionBar updates captureMode)
+    const handleStorageChange = (e) => {
+      if (e.key === 'actionBar_captureMode') {
+        updateCaptureMode();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also poll periodically to catch changes from same window
+    const interval = setInterval(updateCaptureMode, 500);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
 
 
   // Debug: Log when component mounts
@@ -582,6 +614,25 @@ const FloatingWidget = () => {
                   )}
                 </svg>
               </button>
+              
+              {/* Mode indicator circle - shows single/multi mode */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-2px',
+                  left: '-2px',
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: captureMode === 'multiple' ? '#10B981' : themeColors.primaryBlue,
+                  border: `2px solid ${themeColors.primaryBackground}`,
+                  zIndex: 11,
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.4)',
+                  pointerEvents: 'none',
+                  transition: 'all 0.3s ease'
+                }}
+                title={captureMode === 'multiple' ? 'Multiple Mode (Ctrl+3 to toggle)' : 'Single Mode (Ctrl+3 to toggle)'}
+              />
               
               {/* Badge showing number of collected images when collapsed */}
               {actionBarCollapsed && collectedImagesCount > 0 && (

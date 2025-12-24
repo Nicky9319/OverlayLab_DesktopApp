@@ -259,6 +259,12 @@ const ActionBar = () => {
       } else if (eventName === 'validate-screenshot-request' && payload) {
         console.log('ActionBar: Screenshot validation request received from:', payload.source);
         handleScreenshotValidation(payload.source);
+      } else if (eventName === 'process-request' && payload) {
+        console.log('ActionBar: Process request received from:', payload.source);
+        handleProcessRequest();
+      } else if (eventName === 'toggle-capture-mode' && payload) {
+        console.log('ActionBar: Toggle capture mode request received from:', payload.source);
+        handleToggleCaptureMode();
       } else {
         console.log('ActionBar: Ignoring event:', eventName);
       }
@@ -1455,6 +1461,50 @@ const ActionBar = () => {
     }
   };
 
+  // Handle process request from Ctrl+2 shortcut
+  const handleProcessRequest = async () => {
+    console.log('ActionBar: Processing request received, current mode:', captureModeRef.current);
+    
+    const currentMode = captureModeRef.current || captureMode;
+    
+    if (currentMode === 'multiple') {
+      // Multiple mode: process collected images
+      if (collectedImagesRef.current.length > 0 || collectedImages.length > 0) {
+        console.log('ActionBar: Multiple mode - processing collected images');
+        await handleProcessMultipleImages();
+      } else {
+        console.log('ActionBar: Multiple mode - no images collected yet');
+        alert('No images collected yet. Take screenshots first using Ctrl+1.');
+      }
+    } else {
+      // Single mode: Ctrl+2 should not trigger screenshot (Ctrl+1 handles that)
+      console.log('ActionBar: Single mode - Ctrl+2 is for processing only. Use Ctrl+1 to take screenshots.');
+      alert('In single mode, use Ctrl+1 to take screenshots. Ctrl+2 is only for processing collected images in multiple mode.');
+    }
+  };
+
+  // Handle toggle capture mode from Ctrl+3 shortcut
+  const handleToggleCaptureMode = () => {
+    const currentMode = captureModeRef.current || captureMode;
+    const newMode = currentMode === 'single' ? 'multiple' : 'single';
+    
+    console.log('ActionBar: Toggling capture mode from', currentMode, 'to', newMode);
+    
+    setCaptureMode(newMode);
+    captureModeRef.current = newMode;
+    
+    // Persist to localStorage
+    try {
+      localStorage.setItem('actionBar_captureMode', newMode);
+      console.log('ActionBar: Capture mode saved to localStorage:', newMode);
+    } catch (error) {
+      console.error('ActionBar: Error saving capture mode to localStorage:', error);
+    }
+    
+    // Show brief feedback
+    console.log(`ActionBar: Capture mode changed to ${newMode} mode`);
+  };
+
   // Handle canceling/deleting collected images
   const handleCancelMultipleImages = async () => {
     console.log('ActionBar: Canceling multiple images...');
@@ -1465,11 +1515,13 @@ const ActionBar = () => {
       
       // Clear collected images regardless of API result
       setCollectedImages([]);
+      collectedImagesRef.current = [];
       console.log('ActionBar: Collected images cleared');
     } catch (error) {
       console.error('ActionBar: Error deleting collective session:', error);
       // Still clear local images even if API fails
       setCollectedImages([]);
+      collectedImagesRef.current = [];
     }
     
     // Restore click-through after cancel
