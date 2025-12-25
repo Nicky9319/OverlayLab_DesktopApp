@@ -1,6 +1,6 @@
 {
   "name": "overlaylab",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Overlay Lab Desktop Application",
   "main": "./out/main/main.js",
   "author": "example.com",
