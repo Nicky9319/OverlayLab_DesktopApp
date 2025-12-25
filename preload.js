@@ -88,6 +88,13 @@ if (process.contextIsolated) {
       onOpenSelector: (callback) => ipcRenderer.on('overlay:openSelector', callback),
       // AirType API
       pasteText: (text) => ipcRenderer.invoke('airtype:pasteText', text),
+      // Image Queue API
+      saveImageToQueue: (imageBuffer, bucketId, metadata) => ipcRenderer.invoke('image-queue:save-image', imageBuffer, bucketId, metadata),
+      saveImageToQueueFromBase64: (base64DataUrl, bucketId, metadata) => ipcRenderer.invoke('image-queue:save-image-from-base64', base64DataUrl, bucketId, metadata),
+      setQueueToken: (token) => ipcRenderer.invoke('image-queue:set-token', token),
+      getQueueStatus: () => ipcRenderer.invoke('image-queue:get-status'),
+      onQueueStatusUpdate: (callback) => ipcRenderer.on('image-queue:status-update', (event, data) => callback(data)),
+      removeQueueStatusListener: () => ipcRenderer.removeAllListeners('image-queue:status-update'),
     });
 
     contextBridge.exposeInMainWorld('widgetAPI', {
@@ -255,20 +262,27 @@ else{
     saveOverlayType: (overlayType) => ipcRenderer.invoke('overlay:saveOverlayType', overlayType),
     getOverlayType: () => ipcRenderer.invoke('overlay:getOverlayType'),
     onOpenSelector: (callback) => ipcRenderer.on('overlay:openSelector', callback),
-    // AirType API
-    pasteText: (text) => {
-      console.log('[Preload] AirType pasteText called - sending IPC event to main process');
-      console.log('[Preload] IPC Channel: airtype:pasteText');
-      console.log('[Preload] Text length:', text?.length || 0);
-      return ipcRenderer.invoke('airtype:pasteText', text).then(result => {
-        console.log('[Preload] IPC event response received from main process:', result);
-        return result;
-      }).catch(error => {
-        console.error('[Preload] IPC event error:', error);
-        throw error;
-      });
-    },
-    getAirtypeAutoPaste: () => ipcRenderer.invoke('settings:getAirtypeAutoPaste'),
-    setAirtypeAutoPaste: (value) => ipcRenderer.invoke('settings:setAirtypeAutoPaste', value),
-  }
+      // AirType API
+      pasteText: (text) => {
+        console.log('[Preload] AirType pasteText called - sending IPC event to main process');
+        console.log('[Preload] IPC Channel: airtype:pasteText');
+        console.log('[Preload] Text length:', text?.length || 0);
+        return ipcRenderer.invoke('airtype:pasteText', text).then(result => {
+          console.log('[Preload] IPC event response received from main process:', result);
+          return result;
+        }).catch(error => {
+          console.error('[Preload] IPC event error:', error);
+          throw error;
+        });
+      },
+      getAirtypeAutoPaste: () => ipcRenderer.invoke('settings:getAirtypeAutoPaste'),
+      setAirtypeAutoPaste: (value) => ipcRenderer.invoke('settings:setAirtypeAutoPaste', value),
+      // Image Queue API
+      saveImageToQueue: (imageBuffer, bucketId, metadata) => ipcRenderer.invoke('image-queue:save-image', imageBuffer, bucketId, metadata),
+      saveImageToQueueFromBase64: (base64DataUrl, bucketId, metadata) => ipcRenderer.invoke('image-queue:save-image-from-base64', base64DataUrl, bucketId, metadata),
+      setQueueToken: (token) => ipcRenderer.invoke('image-queue:set-token', token),
+      getQueueStatus: () => ipcRenderer.invoke('image-queue:get-status'),
+      onQueueStatusUpdate: (callback) => ipcRenderer.on('image-queue:status-update', (event, data) => callback(data)),
+      removeQueueStatusListener: () => ipcRenderer.removeAllListeners('image-queue:status-update'),
+    }
 }

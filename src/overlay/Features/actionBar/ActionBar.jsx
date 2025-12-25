@@ -31,6 +31,7 @@ const ActionBar = () => {
   const [currentBucketIndex, setCurrentBucketIndex] = useState(0);
   const [screenshotStatus, setScreenshotStatus] = useState('ready'); // 'ready', 'processing', 'success'
   const [globalShortcutFeedback, setGlobalShortcutFeedback] = useState(false);
+  const [queueStatus, setQueueStatus] = useState({ pending: 0, processing: 0, completed: 0, failed: 0 });
   
   // Local state for buckets to ensure they're always available
   const [localBuckets, setLocalBuckets] = useState([]);
@@ -76,15 +77,99 @@ const ActionBar = () => {
     }
   });
   
-  // Multi-image capture mode state
-  const [captureMode, setCaptureMode] = useState('single'); // 'single' | 'multiple'
-  const [collectedImages, setCollectedImages] = useState([]); // { id, base64Thumbnail, timestamp }
+  // Multi-image capture mode state with localStorage persistence
+  const [captureMode, setCaptureMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('actionBar_captureMode');
+      return saved === 'multiple' ? 'multiple' : 'single';
+    } catch (error) {
+      console.error('Error reading captureMode from localStorage:', error);
+      return 'single';
+    }
+  });
+  const [collectedImages, setCollectedImages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('actionBar_collectedImages');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error reading collectedImages from localStorage:', error);
+      return [];
+    }
+  });
   const MAX_COLLECTED_IMAGES = 15;
   
+  // Get actionBarCollapsed state
+  const actionBarCollapsed = useSelector((state) => state.uiVisibility.actionBarCollapsed);
+
+  // Queue status listener and token sync
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.onQueueStatusUpdate) {
+      const handleQueueStatusUpdate = (status) => {
+        setQueueStatus(status);
+        console.log('Queue status updated:', status);
+      };
+      
+      window.electronAPI.onQueueStatusUpdate(handleQueueStatusUpdate);
+      
+      // Get initial status
+      if (window.electronAPI.getQueueStatus) {
+        window.electronAPI.getQueueStatus().then(setQueueStatus);
+      }
+      
+      // Sync token to main process periodically and on mount
+      const syncToken = async () => {
+        try {
+          const token = await getClerkToken();
+          if (token && window.electronAPI && window.electronAPI.setQueueToken) {
+            await window.electronAPI.setQueueToken(token);
+            console.log('Queue token synced to main process');
+          }
+        } catch (error) {
+          console.error('Error syncing queue token:', error);
+        }
+      };
+      
+      // Sync immediately and then every 5 minutes
+      syncToken();
+      const tokenSyncInterval = setInterval(syncToken, 5 * 60 * 1000); // 5 minutes
+      
+      return () => {
+        if (window.electronAPI && window.electronAPI.removeQueueStatusListener) {
+          window.electronAPI.removeQueueStatusListener();
+        }
+        clearInterval(tokenSyncInterval);
+      };
+    }
+  }, []);
+  
   // Refs for capture mode to avoid closure issues in event handlers
-  const captureModeRef = useRef('single');
+  const captureModeRef = useRef(captureMode);
   const localViewModeRef = useRef('customer');
-  const collectedImagesRef = useRef([]);
+  const collectedImagesRef = useRef(collectedImages);
+  
+  // Persist captureMode to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('actionBar_captureMode', captureMode);
+      captureModeRef.current = captureMode;
+    } catch (error) {
+      console.error('Error saving captureMode to localStorage:', error);
+    }
+  }, [captureMode]);
+  
+  // Persist collectedImages to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('actionBar_collectedImages', JSON.stringify(collectedImages));
+      collectedImagesRef.current = collectedImages;
+    } catch (error) {
+      console.error('Error saving collectedImages to localStorage:', error);
+    }
+  }, [collectedImages]);
   
   const position = floatingWidgetPosition || { x: 1200, y: 20 };
   const isNearRightEdge = position.x > window.innerWidth - (dynamicBarWidth + 50);
@@ -174,6 +259,12 @@ const ActionBar = () => {
       } else if (eventName === 'validate-screenshot-request' && payload) {
         console.log('ActionBar: Screenshot validation request received from:', payload.source);
         handleScreenshotValidation(payload.source);
+      } else if (eventName === 'process-request' && payload) {
+        console.log('ActionBar: Process request received from:', payload.source);
+        handleProcessRequest();
+      } else if (eventName === 'toggle-capture-mode' && payload) {
+        console.log('ActionBar: Toggle capture mode request received from:', payload.source);
+        handleToggleCaptureMode();
       } else {
         console.log('ActionBar: Ignoring event:', eventName);
       }
@@ -303,44 +394,48 @@ const ActionBar = () => {
           showLeadProcessingFeedback('error', { message: errorMessage });
         }
       } else {
-        // NEW: Use collective session flow (two-step process)
-        // Step 1: Add image to collective session
-        console.log('📤 Step 1: Adding image to collective session...');
-        const addResult = await addImageToCollectiveSession(imageFile);
+        // NEW: Use async queue system - save to temp folder and return immediately
+        // Pass base64 directly to main process for non-blocking conversion
+        console.log('📤 Saving image to queue for background processing...');
         
-        console.log('📥 Add image response:', addResult);
+        // Sync token before saving to queue (non-blocking, fire and forget)
+        getClerkToken().then(token => {
+          if (token && window.electronAPI && window.electronAPI.setQueueToken) {
+            window.electronAPI.setQueueToken(token);
+          }
+        }).catch(err => console.warn('Token sync error:', err));
         
-        if (addResult.status_code !== 200) {
-          console.error('❌ Failed to add image to session:', addResult);
-          const errorMessage = addResult?.content?.detail || 'Failed to upload image';
-          showLeadProcessingFeedback('error', { message: errorMessage });
-          return;
-        }
+        // Save to queue via IPC using base64 (conversion happens in main process, non-blocking)
+        // Show immediate feedback first (don't wait for queue operation)
+        showLeadProcessingFeedback('success', { 
+          message: 'Image queued for processing'
+        });
         
-        console.log('✅ Image added to session successfully');
-        
-        // Step 2: Process the collective session
-        console.log('📤 Step 2: Processing collective session with bucketId:', bucketId);
-        const processResult = await processCollectiveSession(bucketId);
-        
-        console.log('📥 Process session response:', processResult);
-        
-        if (processResult.status_code === 200) {
-          console.log('🎉 Lead processing completed successfully!');
-          console.log('✅ Response Details:', processResult.content);
+        // Queue in background (fire and forget)
+        if (window.electronAPI && typeof window.electronAPI.saveImageToQueueFromBase64 === 'function') {
+          const queuePromise = window.electronAPI.saveImageToQueueFromBase64(imageDataUrl, bucketId, {
+            source: 'screenshot',
+            timestamp: new Date().toISOString()
+          });
           
-          const successMessage = processResult.content?.message || 'Lead created successfully!';
-          console.log('📢 Success message:', successMessage);
-          
-          // Show success animation on floating widget
-          showLeadProcessingFeedback('success', processResult.content);
+          // Only call .then() if it returns a promise
+          if (queuePromise && typeof queuePromise.then === 'function') {
+            queuePromise.then(result => {
+              if (result && result.success) {
+                console.log('✅ Image saved to queue successfully', { sessionId: result.sessionId });
+              } else {
+                console.error('❌ Failed to save image to queue:', result);
+                const errorMessage = result?.error || 'Failed to queue image';
+                showLeadProcessingFeedback('error', { message: errorMessage });
+              }
+            }).catch(error => {
+              console.error('❌ Error saving image to queue:', error);
+              showLeadProcessingFeedback('error', { message: error.message || 'Failed to queue image' });
+            });
+          }
         } else {
-          console.error('❌ Failed to process session:', processResult);
-          
-          const errorMessage = processResult?.content?.detail || processResult?.content?.error || 'Failed to process lead';
-          console.log('📢 Error message:', errorMessage);
-          // Show error animation on floating widget
-          showLeadProcessingFeedback('error', { message: errorMessage });
+          console.error('❌ electronAPI.saveImageToQueueFromBase64 not available');
+          showLeadProcessingFeedback('error', { message: 'Queue system not available' });
         }
       }
       
@@ -1276,7 +1371,7 @@ const ActionBar = () => {
       return;
     }
     
-    console.log('ActionBar: Processing multiple images...', { count: collectedImages.length });
+    console.log('ActionBar: Queueing multiple images for processing...', { count: collectedImages.length });
     setScreenshotStatus('processing');
     
     try {
@@ -1288,20 +1383,71 @@ const ActionBar = () => {
         return;
       }
       
-      const processResult = await processCollectiveSession(currentBucketId);
-      console.log('ActionBar: Process result:', processResult);
+      // Sync token before saving to queue
+      const token = await getClerkToken();
+      if (token && window.electronAPI && window.electronAPI.setQueueToken) {
+        await window.electronAPI.setQueueToken(token);
+      }
       
-      if (processResult.status_code === 200) {
-        console.log('ActionBar: Multiple images processed successfully');
-        showLeadProcessingFeedback('success', processResult.content);
-        // Clear collected images after successful processing
+      // Generate a single sessionId for all images in this batch
+      const batchSessionId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Save all images to queue with the same sessionId
+      if (window.electronAPI && window.electronAPI.saveImageToQueue) {
+        let successCount = 0;
+        let failCount = 0;
+        
+        for (let i = 0; i < collectedImages.length; i++) {
+          const image = collectedImages[i];
+          try {
+            // Convert base64 to ArrayBuffer
+            const base64Data = image.imageData || image.base64Thumbnail;
+            if (!base64Data) continue;
+            
+            const base64Part = base64Data.split(',')[1] || base64Data;
+            const binaryString = atob(base64Part);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let j = 0; j < binaryString.length; j++) {
+              bytes[j] = binaryString.charCodeAt(j);
+            }
+            
+            const result = await window.electronAPI.saveImageToQueue(bytes, currentBucketId, {
+              source: 'collective',
+              timestamp: new Date().toISOString(),
+              sessionId: batchSessionId, // Use same sessionId for all images
+              imageIndex: i,
+              imageCount: collectedImages.length
+            });
+            
+            if (result && result.success) {
+              successCount++;
+            } else {
+              failCount++;
+            }
+          } catch (error) {
+            console.error('ActionBar: Error queueing image:', error);
+            failCount++;
+          }
+        }
+        
+        // Clear collected images immediately
         setCollectedImages([]);
-        setScreenshotStatus('success');
-        setTimeout(() => setScreenshotStatus('ready'), 2500);
+        
+        if (successCount > 0) {
+          console.log(`ActionBar: ${successCount} images queued successfully`);
+          showLeadProcessingFeedback('success', { 
+            message: `${successCount} image${successCount > 1 ? 's' : ''} queued for processing` 
+          });
+          setScreenshotStatus('success');
+          setTimeout(() => setScreenshotStatus('ready'), 2500);
+        } else {
+          console.error('ActionBar: Failed to queue images');
+          showLeadProcessingFeedback('error', { message: 'Failed to queue images' });
+          setScreenshotStatus('ready');
+        }
       } else {
-        console.error('ActionBar: Failed to process multiple images:', processResult);
-        const errorMessage = processResult?.content?.detail || 'Failed to process images';
-        showLeadProcessingFeedback('error', { message: errorMessage });
+        console.error('ActionBar: Queue system not available');
+        showLeadProcessingFeedback('error', { message: 'Queue system not available' });
         setScreenshotStatus('ready');
       }
       
@@ -1315,6 +1461,50 @@ const ActionBar = () => {
     }
   };
 
+  // Handle process request from Ctrl+2 shortcut
+  const handleProcessRequest = async () => {
+    console.log('ActionBar: Processing request received, current mode:', captureModeRef.current);
+    
+    const currentMode = captureModeRef.current || captureMode;
+    
+    if (currentMode === 'multiple') {
+      // Multiple mode: process collected images
+      if (collectedImagesRef.current.length > 0 || collectedImages.length > 0) {
+        console.log('ActionBar: Multiple mode - processing collected images');
+        await handleProcessMultipleImages();
+      } else {
+        console.log('ActionBar: Multiple mode - no images collected yet');
+        alert('No images collected yet. Take screenshots first using Ctrl+1.');
+      }
+    } else {
+      // Single mode: Ctrl+2 should not trigger screenshot (Ctrl+1 handles that)
+      console.log('ActionBar: Single mode - Ctrl+2 is for processing only. Use Ctrl+1 to take screenshots.');
+      alert('In single mode, use Ctrl+1 to take screenshots. Ctrl+2 is only for processing collected images in multiple mode.');
+    }
+  };
+
+  // Handle toggle capture mode from Ctrl+3 shortcut
+  const handleToggleCaptureMode = () => {
+    const currentMode = captureModeRef.current || captureMode;
+    const newMode = currentMode === 'single' ? 'multiple' : 'single';
+    
+    console.log('ActionBar: Toggling capture mode from', currentMode, 'to', newMode);
+    
+    setCaptureMode(newMode);
+    captureModeRef.current = newMode;
+    
+    // Persist to localStorage
+    try {
+      localStorage.setItem('actionBar_captureMode', newMode);
+      console.log('ActionBar: Capture mode saved to localStorage:', newMode);
+    } catch (error) {
+      console.error('ActionBar: Error saving capture mode to localStorage:', error);
+    }
+    
+    // Show brief feedback
+    console.log(`ActionBar: Capture mode changed to ${newMode} mode`);
+  };
+
   // Handle canceling/deleting collected images
   const handleCancelMultipleImages = async () => {
     console.log('ActionBar: Canceling multiple images...');
@@ -1325,11 +1515,13 @@ const ActionBar = () => {
       
       // Clear collected images regardless of API result
       setCollectedImages([]);
+      collectedImagesRef.current = [];
       console.log('ActionBar: Collected images cleared');
     } catch (error) {
       console.error('ActionBar: Error deleting collective session:', error);
       // Still clear local images even if API fails
       setCollectedImages([]);
+      collectedImagesRef.current = [];
     }
     
     // Restore click-through after cancel
@@ -1344,35 +1536,16 @@ const ActionBar = () => {
     }
     
     try {
-      // Convert base64 to File for API call
-      const base64Data = imageDataUrl.split(',')[1];
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'image/png' });
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `screenshot-${timestamp}.png`;
-      const imageFile = new File([blob], filename, { type: 'image/png' });
-      
-      // Call API to add image to collective session
-      const addResult = await addImageToCollectiveSession(imageFile);
-      
-      if (addResult.status_code === 200) {
-        // Add to local collection for preview
-        const newImage = {
-          id: `img-${Date.now()}`,
-          base64Thumbnail: imageDataUrl,
-          timestamp: Date.now()
-        };
-        setCollectedImages(prev => [...prev, newImage]);
-        console.log('ActionBar: Image added to collection', { count: collectedImages.length + 1 });
-        return true;
-      } else {
-        console.error('ActionBar: Failed to add image to session:', addResult);
-        return false;
-      }
+      // Just add to local collection for preview - actual processing happens when user clicks process
+      const newImage = {
+        id: `img-${Date.now()}`,
+        base64Thumbnail: imageDataUrl,
+        timestamp: Date.now(),
+        imageData: imageDataUrl // Store full image data for later processing
+      };
+      setCollectedImages(prev => [...prev, newImage]);
+      console.log('ActionBar: Image added to collection', { count: collectedImages.length + 1 });
+      return true;
     } catch (error) {
       console.error('ActionBar: Error adding image to collection:', error);
       return false;
@@ -1468,20 +1641,18 @@ const ActionBar = () => {
         // Process the image data directly from the IPC response
         if (result.success && result.imageData) {
           console.log('ActionBar: Processing image data from button click');
-          processScreenshotInOverlay(result.imageData, result.resolution);
           
-          // Restore click-through after screenshot
+          // Restore click-through after screenshot (immediate)
           if (window.forceClickThroughRestore) {
             window.forceClickThroughRestore();
           }
           
-          // Set status to success (green)
-          setScreenshotStatus('success');
+          // Process screenshot (non-blocking, doesn't return a promise)
+          processScreenshotInOverlay(result.imageData, result.resolution);
           
-          // After 2.5 seconds, reset to ready (grey)
-          setTimeout(() => {
-            setScreenshotStatus('ready');
-          }, 2500);
+          // Reset status to ready immediately (queuing happens in background)
+          // This allows user to take next screenshot quickly
+          setScreenshotStatus('ready');
         } else if (!result.success) {
           // Handle other errors
           const errorMsg = result.error || 'Failed to capture screenshot';
@@ -2072,8 +2243,8 @@ const ActionBar = () => {
           )}
         </div>
 
-        {/* Multi-Image Preview Panel - Only visible in multiple mode with images */}
-        {captureMode === 'multiple' && localViewMode === 'customer' && (
+        {/* Multi-Image Preview Panel - Only visible in multiple mode with images when NOT collapsed */}
+        {captureMode === 'multiple' && localViewMode === 'customer' && !actionBarCollapsed && (
           <HoverComponent style={{
             position: 'absolute',
             top: '100%',

@@ -107,18 +107,11 @@ const MainPage = () => {
     }
 
     // Handle action bar visibility (considering individual, global, and collapsed state)
+    // Always keep ActionBar mounted (for event handlers) but hide visually when collapsed
     const shouldShowActionBar = actionBarVisible && allWidgetsVisible && !actionBarCollapsed;
-    if (shouldShowActionBar !== localVisibility.actionBar) {
-      if (shouldShowActionBar) {
-        // Show immediately for smooth fade-in animation
-        setLocalVisibility(prev => ({ ...prev, actionBar: true }));
-      } else {
-        // Hide with delay for smooth fade-out animation
-        const timeoutId = setTimeout(() => {
-          setLocalVisibility(prev => ({ ...prev, actionBar: false }));
-        }, 300); // Match the transition duration
-        timeoutIds.push(timeoutId);
-      }
+    // Always keep ActionBar mounted so event handlers work even when collapsed (for Ctrl+1)
+    if (!localVisibility.actionBar && actionBarVisible) {
+      setLocalVisibility(prev => ({ ...prev, actionBar: true }));
     }
 
 
@@ -148,13 +141,15 @@ const MainPage = () => {
             </div>
           )}
           
-          {localVisibility.actionBar && (
+          {/* Always render ActionBar when actionBarVisible is true (even when collapsed) - this ensures event handlers stay active for Ctrl+1 */}
+          {actionBarVisible && (
             <div style={{
-              opacity: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 1 : 0,
-              transform: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 'translateY(0)' : 'translateY(-10px)',
+              opacity: (allWidgetsVisible && !actionBarCollapsed) ? 1 : 0,
+              transform: (allWidgetsVisible && !actionBarCollapsed) ? 'translateY(0)' : 'translateY(-10px)',
               transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               transitionProperty: 'opacity, transform',
-              pointerEvents: (actionBarVisible && allWidgetsVisible && !actionBarCollapsed) ? 'auto' : 'none'
+              pointerEvents: (allWidgetsVisible && !actionBarCollapsed) ? 'auto' : 'none',
+              visibility: (allWidgetsVisible && !actionBarCollapsed) ? 'visible' : 'hidden'
             }}>
               <ActionBar />
             </div>
