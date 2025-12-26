@@ -1,12 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import BucketSelector from './BucketSelector';
 import { useDispatch } from 'react-redux';
 import { updateLeadPlatformStatus, updateLeadPlatformReachedOut } from '../../../../store/thunks/leadsThunks';
 
 const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateLeadCheckpoint, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
   const dispatch = useDispatch();
-  const [isEditingContext, setIsEditingContext] = useState(false);
-  const [editedContext, setEditedContext] = useState('');
   const [isEditingStatus, setIsEditingStatus] = useState(false);
   const [editedStatus, setEditedStatus] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -44,32 +41,6 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
 
   // Handle null/undefined lead - check AFTER all hooks
   if (!lead) return null;
-
-  const handleContextEdit = () => {
-    setIsEditingContext(true);
-    setEditedContext(lead.context || '');
-  };
-
-  const handleContextSave = () => {
-    if (updateLeadContext) {
-      updateLeadContext(lead.leadId, editedContext);
-    }
-    console.log('Context updated for lead:', lead.leadId, 'New context:', editedContext);
-    setIsEditingContext(false);
-  };
-
-  const handleContextCancel = () => {
-    setIsEditingContext(false);
-    setEditedContext('');
-  };
-
-  const handleContextKeyPress = (e) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      handleContextSave();
-    } else if (e.key === 'Escape') {
-      handleContextCancel();
-    }
-  };
 
   // Platform-specific status editing functions
   const handleStatusEdit = () => {
@@ -278,7 +249,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
           : 'opacity-0 scale-95 translate-x-4 pointer-events-none'
       }`}
     >
-      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[55vh] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
+      <div className="bg-[#111111] rounded-lg shadow-lg border border-[#1C1C1E] p-3 max-w-4xl mx-auto max-h-[calc(100vh-120px)] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
         
         {/* Top Row: Social Media Icons and Actions in same line */}
         <div className="flex items-center justify-between mb-4" style={{ overflow: 'visible' }}>
@@ -343,7 +314,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
 
           {/* Actions - Right side */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Checkpoint Toggle */}
+            {/* Checkpoint Toggle - Keep for marking individual lead */}
             <button
               onClick={() => updateLeadCheckpoint && updateLeadCheckpoint(lead.leadId, !lead.checkpoint)}
               className={`p-1.5 rounded transition-colors ${
@@ -357,15 +328,6 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             </button>
-            {buckets.length > 1 && (
-              <BucketSelector
-                buckets={buckets}
-                currentBucketId={currentBucketId}
-                onBucketChange={moveLeadToBucket}
-                leadId={lead.leadId}
-                className="flex items-center"
-              />
-            )}
             <button
               onClick={handleDeleteClick}
               className="p-1.5 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded transition-colors"
@@ -473,8 +435,8 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
             </div>
           )}
 
-        {/* Company and Context - At the bottom */}
-        <div className="space-y-2 mt-4">
+        {/* Company - At the bottom */}
+        <div className="mt-4">
           {/* Company Row */}
           <div className="flex items-center h-8 bg-[#1C1C1E] rounded-md px-2">
             <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -487,50 +449,21 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
               <span className="text-xs text-[#4A4A4A] italic">No data</span>
             )}
           </div>
-
-          {/* Context Section */}
-          <div className="bg-[#1C1C1E] rounded-md px-2 py-2">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center">
-                <svg className="w-4 h-4 text-[#8E8E93] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                </svg>
-                <span className="text-xs text-[#8E8E93] ml-2">Context</span>
-              </div>
-              {!isEditingContext && (
-                <button onClick={handleContextEdit} className="p-0.5 text-[#8E8E93] hover:text-white">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            {isEditingContext ? (
-              <div className="space-y-2">
-                <textarea
-                  value={editedContext}
-                  onChange={(e) => setEditedContext(e.target.value)}
-                  onKeyDown={handleContextKeyPress}
-                  className="w-full h-20 px-2 py-1.5 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded text-[#E5E5E7] focus:outline-none resize-none"
-                  placeholder="Add context about this lead..."
-                  autoFocus
-                />
-                <div className="flex justify-end gap-2">
-                  <button onClick={handleContextCancel} className="px-2 py-1 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded">Cancel</button>
-                  <button onClick={handleContextSave} className="px-2 py-1 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded">Save</button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs min-h-[36px] cursor-pointer" onClick={handleContextEdit}>
-                {lead.context ? (
-                  <span className="text-[#E5E5E7]">{lead.context}</span>
-                ) : (
-                  <span className="text-[#4A4A4A] italic">No data - click to add</span>
-                )}
-              </div>
-            )}
-          </div>
         </div>
+
+        {/* Platform-Specific Notes Section - Greyed out (no backend yet) */}
+        {currentPlatform && lead[currentPlatform.urlField] && (
+          <div className="mt-4 bg-[#1C1C1E] rounded-md p-3 opacity-50 pointer-events-none">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-[#8E8E93]">
+                Notes for {currentPlatform.name}
+              </h3>
+            </div>
+            <div className="text-xs text-[#8E8E93] min-h-[80px] bg-[#2D2D2F] rounded px-2 py-2 flex items-center justify-center">
+              <p className="text-[#4A4A4A] italic">Notes feature coming soon</p>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Delete Confirmation Modal */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import LeadsContainer from './components/LeadsContainer';
+import LeadCard from './components/LeadCard';
 import { fetchLeads, updateLeadStatus, updateLeadContext, updateLeadCheckpoint, removeLead, moveLeadToBucket } from '../../../store/thunks/leadsThunks';
 import { fetchBuckets } from '../../../store/thunks/bucketsThunks';
 import { fetchTeamBuckets } from '../../../store/thunks/teamBucketsThunks';
@@ -10,6 +11,15 @@ import { setSelectedBucketId } from '../../../store/slices/leadsSlice';
 const Leads = () => {
   const dispatch = useDispatch();
   const [showCheckpoints, setShowCheckpoints] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isEditingCounter, setIsEditingCounter] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [swipeInProgress, setSwipeInProgress] = useState(false);
+  const [lastSwipeTime, setLastSwipeTime] = useState(0);
+  const [isEditingContext, setIsEditingContext] = useState(false);
+  const [editedContext, setEditedContext] = useState('');
   
   // Get view mode and selected team
   const { viewMode, selectedTeamId, teams } = useSelector((state) => state.teams);
@@ -29,6 +39,184 @@ const Leads = () => {
   // Use buckets and leads directly from Redux - already filtered by context
   const filteredBuckets = Array.isArray(buckets) ? buckets : [];
   const filteredLeads = Array.isArray(leads) ? leads : [];
+
+  // Navigation handlers
+  const handlePrevious = () => {
+    setCurrentIndex(prev => prev > 0 ? prev - 1 : filteredLeads.length - 1);
+  };
+
+  const handleNext = () => {
+    setCurrentIndex(prev => prev < filteredLeads.length - 1 ? prev + 1 : 0);
+  };
+
+  // Preserve current lead index when leads change
+  useEffect(() => {
+    if (filteredLeads.length === 0) {
+      setCurrentIndex(0);
+      return;
+    }
+    setCurrentIndex(prevIndex => {
+      if (prevIndex >= filteredLeads.length) {
+        return Math.max(0, filteredLeads.length - 1);
+      }
+      if (prevIndex >= 0 && prevIndex < filteredLeads.length) {
+        const prevLead = filteredLeads[prevIndex];
+        if (prevLead) {
+          const foundIdx = filteredLeads.findIndex(l => l.leadId === prevLead.leadId);
+          if (foundIdx !== -1) {
+            return foundIdx;
+          }
+        }
+      }
+      return Math.min(prevIndex, filteredLeads.length - 1);
+    });
+  }, [filteredLeads]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handlePrevious();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, filteredLeads.length]);
+
+  // Listen for navigation events from checkpoints modal
+  useEffect(() => {
+    const handleNavigateToLead = (e) => {
+      const { index } = e.detail;
+      if (index >= 0 && index < filteredLeads.length) {
+        setCurrentIndex(index);
+      }
+    };
+
+    window.addEventListener('navigateToLead', handleNavigateToLead);
+    return () => {
+      window.removeEventListener('navigateToLead', handleNavigateToLead);
+    };
+  }, [filteredLeads.length]);
+
+  const handleCounterClick = () => {
+    setIsEditingCounter(true);
+    setEditValue(currentIndex + 1);
+  };
+
+  const handleCounterEdit = () => {
+    const index = parseInt(editValue) - 1;
+    if (index >= 0 && index < filteredLeads.length) {
+      setCurrentIndex(index);
+    }
+    setIsEditingCounter(false);
+    setEditValue('');
+  };
+
+  const handleCounterKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      handleCounterEdit();
+    } else if (e.key === 'Escape') {
+      setIsEditingCounter(false);
+      setEditValue('');
+    }
+  };
+
+  const handleCounterBlur = () => {
+    handleCounterEdit();
+  };
+
+  // Touch/swipe handlers
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+    setSwipeInProgress(false);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const currentTime = Date.now();
+    
+    if (Math.abs(distance) > 10 && !swipeInProgress && (currentTime - lastSwipeTime) > 300) {
+      setSwipeInProgress(true);
+      setLastSwipeTime(currentTime);
+      
+      if (distance > 0) {
+        handleNext();
+      } else {
+        handlePrevious();
+      }
+      
+      setTimeout(() => setSwipeInProgress(false), 500);
+    }
+  };
+
+  // Mouse wheel horizontal scroll
+  const handleWheel = (e) => {
+    const currentTime = Date.now();
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 5 && !swipeInProgress && (currentTime - lastSwipeTime) > 300) {
+      e.preventDefault();
+      setSwipeInProgress(true);
+      setLastSwipeTime(currentTime);
+      
+      if (e.deltaX > 0) {
+        handleNext();
+      } else if (e.deltaX < 0) {
+        handlePrevious();
+      }
+      
+      setTimeout(() => setSwipeInProgress(false), 500);
+    }
+  };
+
+  // Context editing handlers
+  const handleContextEdit = () => {
+    if (currentLead) {
+      setIsEditingContext(true);
+      setEditedContext(currentLead.context || '');
+    }
+  };
+
+  const handleContextSave = async () => {
+    if (currentLead) {
+      await handleUpdateLeadContext(currentLead.leadId, editedContext);
+    }
+    setIsEditingContext(false);
+  };
+
+  const handleContextCancel = () => {
+    setIsEditingContext(false);
+    setEditedContext('');
+  };
+
+  const handleContextKeyPress = (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      handleContextSave();
+    } else if (e.key === 'Escape') {
+      handleContextCancel();
+    }
+  };
+
+  // Reset editing state when lead changes
+  useEffect(() => {
+    setIsEditingContext(false);
+    setEditedContext('');
+  }, [currentIndex]);
+
+  const currentLead = filteredLeads[currentIndex] || null;
 
   // Fetch buckets and leads based on view mode
   useEffect(() => {
@@ -236,13 +424,11 @@ const Leads = () => {
 
   if (loading || bucketsLoading) {
     return (
-      <div className="leads-page p-6 bg-[#000000] min-h-screen">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <div className="w-8 h-8 border-4 border-[#007AFF] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-[#8E8E93]">{bucketsLoading ? 'Loading buckets...' : 'Loading leads...'}</p>
-            </div>
+      <div className="leads-page bg-[#000000] min-h-screen">
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-[#007AFF] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-[#8E8E93]">{bucketsLoading ? 'Loading buckets...' : 'Loading leads...'}</p>
           </div>
         </div>
       </div>
@@ -250,109 +436,194 @@ const Leads = () => {
   }
 
   return (
-    <div className="leads-page p-6 bg-[#000000] min-h-screen">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          {/* Header Row: Title + Filter */}
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold text-[#FFFFFF]">Leads</h1>
-            
-            {/* Bucket Selection */}
-            <div className="flex items-center gap-3">
-              <select
-                id="bucket-select"
-                value={selectedBucketId || ''}
-                onChange={(e) => handleBucketChange(e.target.value || null)}
-                className="px-3 py-1.5 bg-[#1C1C1E] border border-[#3D3D3F] rounded-md text-[#E5E5E7] text-sm focus:outline-none focus:ring-1 focus:ring-[#007AFF]"
-                disabled={bucketsError && viewMode === 'team'}
-              >
-                <option value="">All Leads</option>
-                {filteredBuckets.map((bucket) => (
-                  <option key={bucket.bucketId || bucket.id} value={bucket.bucketId || bucket.id}>
-                    {bucket.bucketName || bucket.name}
-                  </option>
-                ))}
-              </select>
-              
-              <button
-                onClick={() => setShowCheckpoints(!showCheckpoints)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors text-sm ${
-                  showCheckpoints 
-                    ? 'bg-[#FFD60A] text-black hover:bg-[#FFD60A]/80' 
-                    : 'bg-[#1C1C1E] text-[#FFD60A] border border-[#FFD60A]/30 hover:bg-[#FFD60A]/10'
-                }`}
-                title={showCheckpoints ? 'Hide Checkpoints' : 'Show Checkpoints'}
-              >
-                <svg className="w-4 h-4" fill={showCheckpoints ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
-                <span className="hidden sm:inline">Checkpoints</span>
-              </button>
-              
-              <button
-                onClick={handleRefetchLeads}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF] text-white rounded-md hover:bg-[#0056CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                title="Refetch Leads"
-              >
-                {loading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                )}
-              </button>
+    <div className="leads-page bg-[#000000] h-screen flex flex-col overflow-hidden">
+      {/* Top Header Bar - Modernized with Rounded Edges */}
+      <div className="bg-[#111111] border-b border-[#1C1C1E] py-2 flex items-center justify-between gap-4 flex-shrink-0 rounded-b-2xl shadow-lg w-full mb-4">
+        {/* Center: Navigation with Counter */}
+        <div className="flex items-center gap-3 flex-1 justify-center px-6">
+          <button
+            onClick={handlePrevious}
+            disabled={filteredLeads.length <= 1}
+            className="p-2 text-[#E5E5E7] hover:text-[#FFFFFF] hover:bg-[#2D2D2F] rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+            title="Previous Lead"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          
+          {isEditingCounter ? (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-[#E5E5E7]">Lead</span>
+              <input
+                type="number"
+                min="1"
+                max={filteredLeads.length}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyPress={handleCounterKeyPress}
+                onBlur={handleCounterBlur}
+                autoFocus
+                className="w-14 px-2 py-1 text-sm bg-[#1C1C1E] border border-[#007AFF] rounded-lg text-[#FFFFFF] focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:border-[#007AFF]"
+              />
+              <span className="text-sm font-medium text-[#E5E5E7]">of {filteredLeads.length}</span>
             </div>
-          </div>
-          
-          <p className="text-[#8E8E93] text-sm mb-4">
-            Browse through your leads one at a time with our card-based interface
-          </p>
-          
-          {/* Error display */}
-          {bucketsError && viewMode === 'team' && selectedTeamId && (
-            <div className="mb-4 p-4 bg-red-900/20 border border-red-500/50 rounded-lg">
-              <p className="text-sm text-red-400 mb-2">Error loading team buckets: {bucketsError}</p>
-              <button
-                onClick={() => dispatch(fetchTeamBuckets(selectedTeamId))}
-                className="text-sm text-red-300 hover:text-red-200 underline"
-              >
-                Retry
-              </button>
+          ) : (
+            <div 
+              className="text-sm font-medium text-[#E5E5E7] cursor-pointer hover:text-[#FFFFFF] transition-colors px-3 py-1 rounded-lg hover:bg-[#1C1C1E]"
+              onClick={handleCounterClick}
+              title="Click to edit"
+            >
+              Lead {currentIndex + 1} of {filteredLeads.length}
             </div>
           )}
           
-          {/* Lead count display */}
-          <div className="text-sm text-[#8E8E93] mb-4">
-            {viewMode === 'team' && selectedTeamId && bucketsError ? (
-              <span className="text-red-400">Unable to load buckets. Please retry.</span>
-            ) : (
-              <>
-                Showing {filteredLeads.length} leads{' '}
-                {viewMode === 'team' && selectedTeamId ? (
-                  <>
-                    for team: {teams.find(t => (t.teamId || t.id) === selectedTeamId)?.teamName || 'Unknown'}{' '}
-                    {selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'}
-                  </>
-                ) : (
-                  selectedBucketId ? `from bucket: ${filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.bucketName || filteredBuckets.find(b => (b.bucketId || b.id) === selectedBucketId)?.name || 'Unknown'}` : '(all buckets)'
-                )}
-              </>
-            )}
-          </div>
+          <button
+            onClick={handleNext}
+            disabled={filteredLeads.length <= 1}
+            className="p-2 text-[#E5E5E7] hover:text-[#FFFFFF] hover:bg-[#2D2D2F] rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+            title="Next Lead"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
         </div>
-        
-        <LeadsContainer 
-          leads={filteredLeads} 
-          updateLeadContext={handleUpdateLeadContext} 
-          updateLeadStatus={handleUpdateLeadStatus}
-          updateLeadCheckpoint={handleUpdateLeadCheckpoint}
-          deleteLead={handleDeleteLead}
-          moveLeadToBucket={handleMoveLeadToBucket}
-          buckets={filteredBuckets}
-          currentBucketId={selectedBucketId}
-        />
+
+        {/* Right side: Checkpoints and Bucket Selector */}
+        <div className="flex items-center gap-3 ml-auto px-6">
+          <button
+            onClick={() => setShowCheckpoints(!showCheckpoints)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm font-medium ${
+              showCheckpoints 
+                ? 'bg-[#FFD60A] text-black hover:bg-[#FFD60A]/90 shadow-md' 
+                : 'bg-[#1C1C1E] text-[#FFD60A] border border-[#FFD60A]/40 hover:bg-[#FFD60A]/10 hover:border-[#FFD60A]/60'
+            }`}
+            title={showCheckpoints ? 'Hide Checkpoints' : 'Show Checkpoints'}
+          >
+            <svg className="w-4 h-4" fill={showCheckpoints ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+            </svg>
+            <span className="hidden sm:inline">Checkpoints</span>
+          </button>
+
+          {/* Bucket Selector Dropdown */}
+          <select
+            id="bucket-select"
+            value={selectedBucketId || ''}
+            onChange={(e) => handleBucketChange(e.target.value || null)}
+            className="px-3 py-1.5 bg-[#1C1C1E] border border-[#3D3D3F] rounded-lg text-[#E5E5E7] text-sm focus:outline-none focus:ring-2 focus:ring-[#007AFF] focus:border-[#007AFF] min-w-[180px] transition-all hover:border-[#4A4A4A]"
+            disabled={bucketsError && viewMode === 'team'}
+          >
+            <option value="">All Leads</option>
+            {filteredBuckets.map((bucket) => (
+              <option key={bucket.bucketId || bucket.id} value={bucket.bucketId || bucket.id}>
+                {bucket.bucketName || bucket.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Main Content Area - Two Column Layout */}
+      <div className="flex flex-1 overflow-hidden min-h-0 px-4 gap-4">
+        {/* Middle Section - Lead Card */}
+        <div 
+          className="flex-1 overflow-y-auto p-6 min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onWheel={handleWheel}
+        >
+          {filteredLeads.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 bg-[#1C1C1E] rounded-full flex items-center justify-center">
+                  <svg className="w-8 h-8 text-[#8E8E93]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-[#FFFFFF] mb-2">No Leads Found</h3>
+                <p className="text-[#8E8E93]">Add some leads to get started with the card view.</p>
+              </div>
+            </div>
+          ) : currentLead ? (
+            <LeadCard 
+              lead={currentLead} 
+              isActive={true}
+              updateLeadContext={handleUpdateLeadContext} 
+              updateLeadStatus={handleUpdateLeadStatus}
+              updateLeadCheckpoint={handleUpdateLeadCheckpoint}
+              deleteLead={handleDeleteLead}
+              moveLeadToBucket={handleMoveLeadToBucket}
+              buckets={filteredBuckets}
+              currentBucketId={selectedBucketId}
+            />
+          ) : null}
+        </div>
+
+        {/* Right Sidebar - Context, Notes & History */}
+        <div className="w-80 bg-[#111111] border-l-2 border-[#2D2D2F] overflow-y-auto min-h-0 h-full rounded-l-2xl [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]">
+          {currentLead ? (
+            <div className="p-4 space-y-4">
+              {/* Context Section */}
+              <div className="bg-[#1C1C1E] rounded-md p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-[#E5E5E7]">Context</h3>
+                  {!isEditingContext && (
+                    <button 
+                      onClick={handleContextEdit} 
+                      className="p-1 text-[#8E8E93] hover:text-white hover:bg-[#2D2D2F] rounded transition-colors"
+                      title="Edit context"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {isEditingContext ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={editedContext}
+                      onChange={(e) => setEditedContext(e.target.value)}
+                      onKeyDown={handleContextKeyPress}
+                      className="w-full min-h-[200px] max-h-[calc(100vh-300px)] px-3 py-2 text-xs bg-[#2D2D2F] border border-[#007AFF] rounded-lg text-[#E5E5E7] focus:outline-none focus:ring-2 focus:ring-[#007AFF] resize-y overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]"
+                      placeholder="Add context about this lead..."
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button 
+                        onClick={handleContextCancel} 
+                        className="px-3 py-1.5 text-xs bg-[#2D2D2F] text-[#E5E5E7] hover:bg-[#3D3D3F] rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleContextSave} 
+                        className="px-3 py-1.5 text-xs bg-[#007AFF] text-white hover:bg-[#0056CC] rounded-lg transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div 
+                    className="text-xs text-[#E5E5E7] whitespace-pre-wrap min-h-[100px] max-h-[calc(100vh-300px)] overflow-y-auto cursor-text [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1C1C1E] [&::-webkit-scrollbar-thumb]:bg-[#4A4A4A] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-[#6A6A6A]"
+                    onClick={handleContextEdit}
+                  >
+                    {currentLead.context || <span className="text-[#4A4A4A] italic">No context available - click to add</span>}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : (
+            <div className="p-4">
+              <p className="text-sm text-[#8E8E93]">Select a lead to view details</p>
+            </div>
+          )}
+        </div>
       </div>
       
       {/* Checkpoints Modal */}
