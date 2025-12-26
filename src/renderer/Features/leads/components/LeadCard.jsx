@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useDispatch } from 'react-redux';
+import BucketSelector from './BucketSelector';
 import { updateLeadPlatformStatus, updateLeadPlatformReachedOut } from '../../../../store/thunks/leadsThunks';
 
 const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateLeadCheckpoint, deleteLead, moveLeadToBucket, buckets = [], currentBucketId }) => {
@@ -328,6 +329,18 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             </button>
+            
+            {/* Bucket Selector - Move lead to different bucket */}
+            {buckets.length > 0 && moveLeadToBucket && (
+              <BucketSelector
+                buckets={buckets}
+                currentBucketId={lead.bucketId || lead.bucket_id || currentBucketId}
+                onBucketChange={moveLeadToBucket}
+                leadId={lead.leadId}
+                className="flex items-center"
+              />
+            )}
+            
             <button
               onClick={handleDeleteClick}
               className="p-1.5 text-[#FF3B30] hover:text-[#FF1D18] hover:bg-[#1C1C1E] rounded transition-colors"

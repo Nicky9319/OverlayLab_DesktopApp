@@ -388,14 +388,30 @@ const Leads = () => {
   const handleMoveLeadToBucket = async (leadId, targetBucketId, sourceBucketId) => {
     try {
       console.log('Moving lead:', { leadId, targetBucketId, sourceBucketId });
+      
+      // Get the current lead index before moving (to handle navigation after move)
+      const currentLeadIndex = currentIndex;
+      const isCurrentLead = currentLead && currentLead.leadId === leadId;
+      
       if (viewMode === 'team' && selectedTeamId) {
         const result = await dispatch(moveTeamLeadToBucket({ teamId: selectedTeamId, leadId, targetBucketId }));
         
         if (moveTeamLeadToBucket.fulfilled.match(result)) {
-          // If we're currently viewing the target bucket, refresh to show the moved lead
-          if (selectedBucketId === targetBucketId) {
-            await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: targetBucketId }));
+          // Always refresh the leads list to ensure UI is up to date
+          // Redux state is updated by the thunk, but refreshing ensures consistency
+          await dispatch(fetchTeamLeads({ teamId: selectedTeamId, bucketId: selectedBucketId || null }));
+          
+          // Adjust current index if the moved lead was the current one and we're viewing source bucket
+          if (isCurrentLead && selectedBucketId === sourceBucketId && filteredLeads.length > 1) {
+            // If we moved the last lead, go to previous one
+            if (currentLeadIndex >= filteredLeads.length - 1) {
+              setCurrentIndex(Math.max(0, filteredLeads.length - 2));
+            } else {
+              // Stay at same index (next lead will be shown)
+              setCurrentIndex(Math.min(currentLeadIndex, filteredLeads.length - 2));
+            }
           }
+          
           console.log('Team lead moved successfully to bucket:', targetBucketId);
         } else {
           console.error('Failed to move team lead:', result.error);
@@ -405,10 +421,21 @@ const Leads = () => {
         const result = await dispatch(moveLeadToBucket({ leadId, targetBucketId, sourceBucketId }));
         
         if (moveLeadToBucket.fulfilled.match(result)) {
-          // If we're currently viewing the target bucket, refresh to show the moved lead
-          if (selectedBucketId === targetBucketId) {
-            await dispatch(fetchLeads(targetBucketId));
+          // Always refresh the leads list to ensure UI is up to date
+          // Redux state is updated by the thunk, but refreshing ensures consistency
+          await dispatch(fetchLeads(selectedBucketId || null));
+          
+          // Adjust current index if the moved lead was the current one and we're viewing source bucket
+          if (isCurrentLead && selectedBucketId === sourceBucketId && filteredLeads.length > 1) {
+            // If we moved the last lead, go to previous one
+            if (currentLeadIndex >= filteredLeads.length - 1) {
+              setCurrentIndex(Math.max(0, filteredLeads.length - 2));
+            } else {
+              // Stay at same index (next lead will be shown)
+              setCurrentIndex(Math.min(currentLeadIndex, filteredLeads.length - 2));
+            }
           }
+          
           console.log('Lead moved successfully to bucket:', targetBucketId);
         } else {
           console.error('Failed to move lead:', result.error);
