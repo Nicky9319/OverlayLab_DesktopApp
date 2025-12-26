@@ -15,8 +15,16 @@ const BucketSelector = ({
   const buttonRef = useRef(null);
   const dropdownRef = useRef(null);
 
+  // Normalize bucket IDs for comparison (handle both bucketId and id fields)
+  const normalizeBucketId = (bucket) => {
+    return bucket.id || bucket.bucketId;
+  };
+  
   // Filter out the current bucket from the list
-  const availableBuckets = buckets.filter(bucket => bucket.id !== currentBucketId);
+  const availableBuckets = buckets.filter(bucket => {
+    const bucketId = normalizeBucketId(bucket);
+    return bucketId !== currentBucketId;
+  });
 
   // Calculate dropdown position when opening
   useEffect(() => {
@@ -114,8 +122,11 @@ const BucketSelector = ({
   };
 
   const getCurrentBucketName = () => {
-    const currentBucket = buckets.find(bucket => bucket.id === currentBucketId);
-    return currentBucket ? currentBucket.name : 'Unknown Bucket';
+    const currentBucket = buckets.find(bucket => {
+      const bucketId = normalizeBucketId(bucket);
+      return bucketId === currentBucketId;
+    });
+    return currentBucket ? (currentBucket.name || currentBucket.bucketName) : 'Unknown Bucket';
   };
 
   if (availableBuckets.length === 0) {
@@ -211,30 +222,34 @@ const BucketSelector = ({
 
           {/* Scrollable Bucket List */}
           <div className="max-h-[160px] overflow-y-auto bucket-selector-scroll">
-            {availableBuckets.map((bucket) => (
-              <button
-                key={bucket.id}
-                onClick={() => handleBucketSelect(bucket.id)}
-                disabled={isLoading}
-                className="w-full text-left px-3 py-2 text-sm text-[#E5E5E7] hover:bg-[#2D2D2F] hover:text-[#FFFFFF] transition-colors disabled:opacity-50 border-b border-[#2D2D2F] last:border-b-0 group"
-              >
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 bg-gradient-to-br from-[#007AFF] to-[#0056CC] rounded-md flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
+            {availableBuckets.map((bucket) => {
+              const bucketId = normalizeBucketId(bucket);
+              const bucketName = bucket.name || bucket.bucketName;
+              return (
+                <button
+                  key={bucketId}
+                  onClick={() => handleBucketSelect(bucketId)}
+                  disabled={isLoading}
+                  className="w-full text-left px-3 py-2 text-sm text-[#E5E5E7] hover:bg-[#2D2D2F] hover:text-[#FFFFFF] transition-colors disabled:opacity-50 border-b border-[#2D2D2F] last:border-b-0 group"
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 bg-gradient-to-br from-[#007AFF] to-[#0056CC] rounded-md flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-[#E5E5E7] truncate text-xs">{bucketName}</div>
+                    </div>
+                    {isLoading && (
+                      <svg className="w-3 h-3 animate-spin text-[#007AFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-[#E5E5E7] truncate text-xs">{bucket.name}</div>
-                  </div>
-                  {isLoading && (
-                    <svg className="w-3 h-3 animate-spin text-[#007AFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  )}
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
 
           {/* Footer */}
