@@ -13,8 +13,6 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
   const [copiedUrl, setCopiedUrl] = useState(null);
   const [activeTab, setActiveTab] = useState(null); // Platform name for active tab
 
-  if (!lead) return null;
-
   // Define platform configuration
   const platforms = useMemo(() => [
     { key: 'linkedin', urlField: 'linkedinUrl', statusField: 'linkedinStatus', reachedOutField: 'linkedinReachedOut', name: 'LinkedIn', icon: 'linkedin' },
@@ -28,6 +26,7 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
 
   // Show all platforms, but prioritize those with URLs for initial tab
   const availablePlatforms = useMemo(() => {
+    if (!lead) return [];
     return platforms.filter(p => lead[p.urlField]);
   }, [lead, platforms]);
 
@@ -42,6 +41,9 @@ const LeadCard = ({ lead, isActive, updateLeadContext, updateLeadStatus, updateL
   const currentPlatform = useMemo(() => {
     return platforms.find(p => p.key === activeTab);
   }, [activeTab, platforms]);
+
+  // Handle null/undefined lead - check AFTER all hooks
+  if (!lead) return null;
 
   const handleContextEdit = () => {
     setIsEditingContext(true);

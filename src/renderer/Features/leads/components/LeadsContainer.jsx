@@ -18,11 +18,24 @@ const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, updat
       return;
     }
     setCurrentIndex(prevIndex => {
-      // Try to preserve the current lead by leadId
-      const prevLead = leads[prevIndex];
-      if (!prevLead) return 0;
-      const foundIdx = leads.findIndex(l => l.leadId === prevLead.leadId);
-      return foundIdx !== -1 ? foundIdx : 0;
+      // Ensure index is within bounds
+      if (prevIndex >= leads.length) {
+        // If index is out of bounds (e.g., current lead was deleted), move to last valid index
+        return Math.max(0, leads.length - 1);
+      }
+      // Try to preserve the current lead by leadId if we have a valid lead at prevIndex
+      if (prevIndex >= 0 && prevIndex < leads.length) {
+        const prevLead = leads[prevIndex];
+        if (prevLead) {
+          const foundIdx = leads.findIndex(l => l.leadId === prevLead.leadId);
+          if (foundIdx !== -1) {
+            return foundIdx;
+          }
+        }
+      }
+      // If we can't find the previous lead, stay at the same index position (now points to next lead)
+      // but ensure it's within bounds
+      return Math.min(prevIndex, leads.length - 1);
     });
   }, [leads]);
 
@@ -246,17 +259,19 @@ const LeadsContainer = ({ leads = [], updateLeadContext, updateLeadStatus, updat
         onTouchEnd={onTouchEnd}
         onWheel={handleWheel}
       >
-        <LeadCard 
-          lead={leads[currentIndex]} 
-          isActive={true}
-          updateLeadContext={updateLeadContext}
-          updateLeadStatus={updateLeadStatus}
-          updateLeadCheckpoint={updateLeadCheckpoint}
-          deleteLead={deleteLead}
-          moveLeadToBucket={moveLeadToBucket}
-          buckets={buckets}
-          currentBucketId={currentBucketId}
-        />
+        {leads[currentIndex] && (
+          <LeadCard 
+            lead={leads[currentIndex]} 
+            isActive={true}
+            updateLeadContext={updateLeadContext}
+            updateLeadStatus={updateLeadStatus}
+            updateLeadCheckpoint={updateLeadCheckpoint}
+            deleteLead={deleteLead}
+            moveLeadToBucket={moveLeadToBucket}
+            buckets={buckets}
+            currentBucketId={currentBucketId}
+          />
+        )}
       </div>
 
       {/* Navigation Info */}
