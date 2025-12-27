@@ -4503,7 +4503,6 @@ app.whenReady().then(async () => {
     logger.debug('Screenshot shortcut Ctrl+1/Option+1 pressed');
     
     const now = Date.now();
-    const cooldownTime = 1500; // 1.5 seconds cooldown
     
     // Check if screenshot process is currently active
     if (screenshotProcessActive) {
@@ -4519,23 +4518,8 @@ app.whenReady().then(async () => {
       return;
     }
     
-    // Check cooldown period
-    if (now - lastValidationRequestTime < cooldownTime) {
-      console.log('Screenshot validation request on cooldown, showing dialog');
-      logger.debug(`Screenshot validation cooldown active. Time remaining: ${cooldownTime - (now - lastValidationRequestTime)}ms`);
-      
-      // Show dialog to user about cooldown
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        const remainingTime = Math.ceil((cooldownTime - (now - lastValidationRequestTime)) / 1000);
-        mainWindow.webContents.executeJavaScript(`
-          alert('Please wait ${remainingTime} more second(s) before taking another screenshot.');
-        `).catch(err => console.warn('Failed to show cooldown dialog:', err));
-      }
-      return;
-    }
-    
-    // Update last validation request time
-    lastValidationRequestTime = now;
+    // Note: Removed cooldown check - validation request is fast and non-blocking,
+    // and screenshotProcessActive already prevents concurrent screenshots
     
     // Send validation request to overlay window instead of directly taking screenshot
     if (widgetWindow && widgetWindow.window && !widgetWindow.window.isDestroyed() && widgetWindow.window.webContents) {

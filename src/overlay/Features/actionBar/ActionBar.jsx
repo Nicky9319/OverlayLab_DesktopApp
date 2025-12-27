@@ -1372,14 +1372,21 @@ const ActionBar = () => {
     }
     
     console.log('ActionBar: Queueing multiple images for processing...', { count: collectedImages.length });
-    setScreenshotStatus('processing');
+    // Note: Don't set screenshotStatus to 'processing' here - queueing is non-blocking
+    // and users should be able to take new screenshots while images are being queued
     
     try {
       const currentBucketId = selectedBucketIdRef.current || selectedBucketId;
       if (!currentBucketId) {
         alert('Please select a bucket before processing');
-        setScreenshotStatus('ready');
-        if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+        // Restore click-through - use widgetAPI to properly configure window
+        setTimeout(() => {
+          if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+            window.widgetAPI.enableClickThrough();
+          } else if (window.forceClickThroughRestore) {
+            window.forceClickThroughRestore();
+          }
+        }, 100);
         return;
       }
       
@@ -1430,34 +1437,54 @@ const ActionBar = () => {
           }
         }
         
-        // Clear collected images immediately
-        setCollectedImages([]);
-        
         if (successCount > 0) {
           console.log(`ActionBar: ${successCount} images queued successfully`);
           showLeadProcessingFeedback('success', { 
             message: `${successCount} image${successCount > 1 ? 's' : ''} queued for processing` 
           });
-          setScreenshotStatus('success');
-          setTimeout(() => setScreenshotStatus('ready'), 2500);
+          // Clear collected images after a short delay to prevent layout shift
+          setTimeout(() => {
+            setCollectedImages([]);
+          }, 2500);
         } else {
           console.error('ActionBar: Failed to queue images');
           showLeadProcessingFeedback('error', { message: 'Failed to queue images' });
-          setScreenshotStatus('ready');
+          // Clear collected images on error as well
+          setCollectedImages([]);
         }
       } else {
         console.error('ActionBar: Queue system not available');
         showLeadProcessingFeedback('error', { message: 'Queue system not available' });
-        setScreenshotStatus('ready');
+        // Restore click-through when queue system unavailable - use widgetAPI to properly configure window
+        setTimeout(() => {
+          if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+            window.widgetAPI.enableClickThrough();
+          } else if (window.forceClickThroughRestore) {
+            window.forceClickThroughRestore();
+          }
+        }, 100);
+        return;
       }
       
-      // Restore click-through after processing
-      if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+      // Restore click-through after processing - use widgetAPI to properly configure window
+      setTimeout(() => {
+        if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+          window.widgetAPI.enableClickThrough();
+        } else if (window.forceClickThroughRestore) {
+          window.forceClickThroughRestore();
+        }
+      }, 100);
     } catch (error) {
       console.error('ActionBar: Error processing multiple images:', error);
       showLeadProcessingFeedback('error', { message: error.message });
-      setScreenshotStatus('ready');
-      if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+      // Restore click-through on error - use widgetAPI to properly configure window
+      setTimeout(() => {
+        if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+          window.widgetAPI.enableClickThrough();
+        } else if (window.forceClickThroughRestore) {
+          window.forceClickThroughRestore();
+        }
+      }, 100);
     }
   };
 
@@ -1477,9 +1504,10 @@ const ActionBar = () => {
         alert('No images collected yet. Take screenshots first using Ctrl+1.');
       }
     } else {
-      // Single mode: Ctrl+2 should not trigger screenshot (Ctrl+1 handles that)
-      console.log('ActionBar: Single mode - Ctrl+2 is for processing only. Use Ctrl+1 to take screenshots.');
-      alert('In single mode, use Ctrl+1 to take screenshots. Ctrl+2 is only for processing collected images in multiple mode.');
+      // Single mode: Ctrl+2 is not applicable (Ctrl+1 handles screenshots which process immediately)
+      console.log('ActionBar: Single mode - Ctrl+2 is not applicable. Use Ctrl+1 to take screenshots.');
+      // Silently return - no alert to avoid disruption
+      return;
     }
   };
 
@@ -1524,8 +1552,14 @@ const ActionBar = () => {
       collectedImagesRef.current = [];
     }
     
-    // Restore click-through after cancel
-    if (window.forceClickThroughRestore) window.forceClickThroughRestore();
+    // Restore click-through after cancel - use widgetAPI to properly configure window
+    setTimeout(() => {
+      if (window.widgetAPI && window.widgetAPI.enableClickThrough) {
+        window.widgetAPI.enableClickThrough();
+      } else if (window.forceClickThroughRestore) {
+        window.forceClickThroughRestore();
+      }
+    }, 100);
   };
 
   // Add image to collection in multiple mode
@@ -1552,65 +1586,8 @@ const ActionBar = () => {
     }
   };
 
-    // Capture screenshot and save locally
-  const handleActionButton = async () => {
-    console.log(`ActionBar: Action button clicked with option: ${selectedOption}`);
-    console.log('ActionBar: Button click state:', {
-      selectedOption,
-      selectedBucketId,
-      bucketsLength: buckets ? buckets.length : 'null/undefined',
-      localBucketsLength: localBuckets.length,
-      buckets: buckets,
-      localBuckets: localBuckets
-    });
-    
-    // Check if screenshot process is already active
-    if (screenshotStatus === 'processing') {
-      console.log('ActionBar: Screenshot already in progress, ignoring button click');
-      alert('Screenshot is already in progress. Please wait for it to complete.');
-      return;
-    }
-    
-    // Check if a valid option is selected
-    if (!selectedOption || selectedOption === 'Select Option') {
-      console.log('ActionBar: No valid option selected from button, auto-selecting first available option');
-      
-      // Auto-select bucket if available - use current index if valid, otherwise first bucket
-      const availableBucketsForButton = localBuckets.length > 0 ? localBuckets : buckets;
-      if (availableBucketsForButton && availableBucketsForButton.length > 0) {
-        // Use current bucket index if it's valid, otherwise use first bucket
-        const targetIndex = (currentBucketIndexRef.current < availableBucketsForButton.length) ? 
-                           currentBucketIndexRef.current : 0;
-        const targetBucket = availableBucketsForButton[targetIndex];
-        
-        console.log('ActionBar: Button auto-selection logic:', {
-          currentBucketIndexRef: currentBucketIndexRef.current,
-          availableBucketsLength: availableBucketsForButton.length,
-          targetIndex,
-          targetBucket: targetBucket ? { name: targetBucket.name, id: targetBucket.id } : 'null'
-        });
-        
-        setSelectedOption(targetBucket.name);
-        setSelectedBucketId(targetBucket.id);
-        setCurrentBucketIndex(targetIndex);
-        selectedOptionRef.current = targetBucket.name;
-        selectedBucketIdRef.current = targetBucket.id;
-        currentBucketIndexRef.current = targetIndex;
-        console.log('ActionBar: Auto-selected option from button click:', targetBucket.name, 'with ID:', targetBucket.id, 'at index:', targetIndex);
-        
-        // Continue with screenshot after auto-selection
-        setTimeout(() => {
-          handleActionButton(); // Recursive call after auto-selection
-        }, 100);
-        return;
-      } else {
-        console.log('ActionBar: No buckets available for button click, cannot take screenshot');
-        console.log('ActionBar: Button click final bucket state - Redux:', buckets, 'Local:', localBuckets);
-        alert('Please wait for buckets to load before taking a screenshot.');
-        return;
-      }
-    }
-    
+  // Extract screenshot logic to avoid recursion
+  const performScreenshotCapture = async () => {
     // Set status to processing (red)
     setScreenshotStatus('processing');
     
@@ -1692,6 +1669,67 @@ const ActionBar = () => {
       // Reset status to ready
       setScreenshotStatus('ready');
     }
+  };
+
+    // Capture screenshot and save locally
+  const handleActionButton = async () => {
+    console.log(`ActionBar: Action button clicked with option: ${selectedOption}`);
+    console.log('ActionBar: Button click state:', {
+      selectedOption,
+      selectedBucketId,
+      bucketsLength: buckets ? buckets.length : 'null/undefined',
+      localBucketsLength: localBuckets.length,
+      buckets: buckets,
+      localBuckets: localBuckets
+    });
+    
+    // Check if screenshot process is already active
+    if (screenshotStatus === 'processing') {
+      console.log('ActionBar: Screenshot already in progress, ignoring button click');
+      alert('Screenshot is already in progress. Please wait for it to complete.');
+      return;
+    }
+    
+    // Check if a valid option is selected
+    if (!selectedOption || selectedOption === 'Select Option') {
+      console.log('ActionBar: No valid option selected from button, auto-selecting first available option');
+      
+      // Auto-select bucket if available - use current index if valid, otherwise first bucket
+      const availableBucketsForButton = localBuckets.length > 0 ? localBuckets : buckets;
+      if (availableBucketsForButton && availableBucketsForButton.length > 0) {
+        // Use current bucket index if it's valid, otherwise use first bucket
+        const targetIndex = (currentBucketIndexRef.current < availableBucketsForButton.length) ? 
+                           currentBucketIndexRef.current : 0;
+        const targetBucket = availableBucketsForButton[targetIndex];
+        
+        console.log('ActionBar: Button auto-selection logic:', {
+          currentBucketIndexRef: currentBucketIndexRef.current,
+          availableBucketsLength: availableBucketsForButton.length,
+          targetIndex,
+          targetBucket: targetBucket ? { name: targetBucket.name, id: targetBucket.id } : 'null'
+        });
+        
+        setSelectedOption(targetBucket.name);
+        setSelectedBucketId(targetBucket.id);
+        setCurrentBucketIndex(targetIndex);
+        selectedOptionRef.current = targetBucket.name;
+        selectedBucketIdRef.current = targetBucket.id;
+        currentBucketIndexRef.current = targetIndex;
+        console.log('ActionBar: Auto-selected option from button click:', targetBucket.name, 'with ID:', targetBucket.id, 'at index:', targetIndex);
+        
+        // Continue with screenshot after auto-selection
+        await performScreenshotCapture();
+        return;
+      } else {
+        console.log('ActionBar: No buckets available for button click, cannot take screenshot');
+        console.log('ActionBar: Button click final bucket state - Redux:', buckets, 'Local:', localBuckets);
+        alert('Please wait for buckets to load before taking a screenshot.');
+        return;
+      }
+    }
+    
+    // If we have a valid selection, proceed directly with screenshot capture
+    await performScreenshotCapture();
   };
 
   // Update current bucket when buckets change
