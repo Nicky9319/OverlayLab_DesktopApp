@@ -3,7 +3,7 @@ import visibilitySlice from './slices/visibilitySlice'
 import floatingWidgetSlice from './slices/floatingWidgetSlice'
 import uiVisibilityReducer from './slices/uiVisibilitySlice'
 import chatStateReducer from './slices/chatStateSlice'
-import webSocketReducer from './slices/websocketSlice'
+import webSocketReducer from './slices/webSocketSlice'
 import overlayTypeReducer from './slices/overlayTypeSlice'
 import overlaySelectorReducer from './slices/overlaySelectorSlice'
 // Use global slices for buckets and leads to ensure state synchronization across all windows
